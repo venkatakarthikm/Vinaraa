@@ -24,11 +24,6 @@ export default function Album() {
   const handlePlay = (startIndex = 0) => {
     if (!album?.songs?.length) return;
     const songs = album.songs.map((s: any) => formatPlayerSong(s));
-      album: album.name,
-      albumId: album.id,
-      image: s.image,
-      durationMs: s.durationMs,
-    }));
     setQueue(songs, startIndex);
     setShowPlayer(true);
     navigate('/player');
