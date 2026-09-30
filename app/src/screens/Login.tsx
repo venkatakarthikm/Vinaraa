@@ -29,7 +29,7 @@ export default function Login() {
         password,
         device: deviceInfo,
       });
-      await login(res.user, { accessToken: res.accessToken, refreshToken: res.refreshToken });
+      await login(res.user, { accessToken: res.tokens.accessToken, refreshToken: res.tokens.refreshToken });
       if (!res.user?.onboarding?.completed) {
         navigate('/onboarding', { replace: true });
       } else {
