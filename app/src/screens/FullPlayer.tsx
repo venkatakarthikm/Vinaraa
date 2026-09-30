@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { usePlayerStore } from '@/store/player';
-import { tracking, music } from '@/api/endpoints';
+import { tracking } from '@/api/endpoints';
 import {
   ChevronDown, Heart, MoreHorizontal, SkipBack, SkipForward,
   Play, Pause, Shuffle, Repeat, Repeat1, Share2, ListMusic, Download
@@ -19,7 +19,7 @@ function formatTime(ms: number) {
 export default function FullPlayer() {
   const {
     isPlaying, positionMs, durationMs,
-    repeat, shuffle, setPlaying, setPosition, nextTrack, previousTrack,
+    repeat, shuffle, togglePlay, seekTo, nextTrack, previousTrack,
     setRepeat, setShuffle, setShowPlayer, sessionId, setSessionId, currentSong
   } = usePlayerStore();
   const navigate = useNavigate();
@@ -81,13 +81,6 @@ export default function FullPlayer() {
     }
   }, [playerTab, song?.id]);
 
-  useEffect(() => {
-    if (!isPlaying) return;
-    const interval = setInterval(() => {
-      setPosition(Math.min(positionRef.current + 1000, durationMs || Infinity));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [isPlaying, durationMs]);
 
   const progress = durationMs ? (seeking ? seekValue : positionMs / durationMs) : 0;
 
@@ -98,7 +91,7 @@ export default function FullPlayer() {
 
   const handleSeekCommit = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newPos = Number(e.target.value) * (durationMs || 0);
-    setPosition(newPos);
+    seekTo(newPos);
     setSeeking(false);
   };
 
@@ -236,7 +229,7 @@ export default function FullPlayer() {
             <SkipBack size={30} className="text-text" fill="currentColor" />
           </button>
           <motion.button
-            onClick={() => setPlaying(!isPlaying)}
+            onClick={() => togglePlay()}
             whileTap={{ scale: 0.94 }}
             className="bg-gradient-to-r from-primary to-primary-soft rounded-3xl flex items-center justify-center shadow-colored"
             aria-label={isPlaying ? 'Pause' : 'Play'}

@@ -27,16 +27,20 @@ class VinaraaPlayerPlugin : Plugin() {
         player = ExoPlayer.Builder(context).build().also { exo ->
             exo.addListener(object : Player.Listener {
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
-                    val event = JSObject().apply {
-                        put("isPlaying", isPlaying)
+                    activity?.runOnUiThread {
+                        val event = JSObject().apply {
+                            put("isPlaying", isPlaying)
+                        }
+                        notifyListeners("playbackStateChanged", event)
                     }
-                    notifyListeners("playbackStateChanged", event)
                 }
 
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     if (playbackState == Player.STATE_ENDED) {
-                        val event = JSObject().apply { put("type", "ended") }
-                        notifyListeners("playbackStateChanged", event)
+                        activity?.runOnUiThread {
+                            val event = JSObject().apply { put("type", "ended") }
+                            notifyListeners("playbackStateChanged", event)
+                        }
                     }
                 }
             })
@@ -68,16 +72,8 @@ class VinaraaPlayerPlugin : Plugin() {
             call.reject("streamUrl is required")
             return
         }
-        val songId = call.getString("songId", "")
-        val title = call.getString("title", "")
-        val artist = call.getString("artist", "")
 
         activity.runOnUiThread {
-            val token = prefs?.getString("access_token", null)
-            val headers = if (token != null) {
-                mapOf("Authorization" to "Bearer $token")
-            } else emptyMap()
-
             val mediaItem = MediaItem.fromUri(streamUrl)
             player?.run {
                 setMediaItem(mediaItem)

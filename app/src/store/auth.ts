@@ -1,6 +1,7 @@
 // Updated auth store with persistent token storage
 import { create } from 'zustand';
 import { VinaraaPlayer } from '@/native/player';
+import { Preferences } from '@capacitor/preferences';
 
 interface AuthState {
   isAuthenticated: boolean;
@@ -17,19 +18,23 @@ export const useAuthStore = create<AuthState>((set) => ({
   login: async (user, tokens) => {
     try {
       await VinaraaPlayer.setAuth({ accessToken: tokens.accessToken, refreshToken: tokens.refreshToken });
+      await Preferences.set({ key: 'vinaraa_refresh_token', value: tokens.refreshToken });
     } catch (_e) {
       console.warn('VinaraaPlayer native plugin not available', _e);
       localStorage.setItem('mockAccessToken', tokens.accessToken);
       localStorage.setItem('mockRefreshToken', tokens.refreshToken);
+      localStorage.setItem('vinaraa_refresh_token', tokens.refreshToken);
     }
     set({ isAuthenticated: true, user });
   },
   logout: async () => {
     try {
       await VinaraaPlayer.setAuth({ accessToken: '', refreshToken: '' });
+      await Preferences.remove({ key: 'vinaraa_refresh_token' });
     } catch (_e) {
       localStorage.removeItem('mockAccessToken');
       localStorage.removeItem('mockRefreshToken');
+      localStorage.removeItem('vinaraa_refresh_token');
     }
     set({ isAuthenticated: false, user: null });
   },

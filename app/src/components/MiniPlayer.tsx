@@ -5,9 +5,10 @@ import { Play, Pause, SkipForward } from 'lucide-react';
 import { springs } from '@/motion';
 
 export default function MiniPlayer() {
-  const { queue, currentIndex, isPlaying, setPlaying, nextTrack, setShowPlayer, showPlayer } = usePlayerStore();
+  const { queue, currentIndex, isPlaying, togglePlay, nextTrack, setShowPlayer, showPlayer, positionMs, durationMs } = usePlayerStore();
   const navigate = useNavigate();
   const song = queue[currentIndex];
+  const progress = durationMs > 0 ? (positionMs / durationMs) * 100 : 0;
 
   if (!song || showPlayer) return null;
 
@@ -34,7 +35,7 @@ export default function MiniPlayer() {
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             <button
-              onClick={(e) => { e.stopPropagation(); setPlaying(!isPlaying); }}
+              onClick={(e) => { e.stopPropagation(); togglePlay(); }}
               className="p-2 rounded-full bg-primary"
               aria-label={isPlaying ? 'Pause' : 'Play'}
             >
@@ -50,7 +51,7 @@ export default function MiniPlayer() {
           </div>
         </button>
         <div className="absolute bottom-0 left-4 right-4 h-0.5 bg-border rounded-full overflow-hidden">
-          <div className="h-full bg-primary rounded-full" style={{ width: '30%' }} />
+          <div className="h-full bg-primary rounded-full transition-all duration-300" style={{ width: `${progress}%` }} />
         </div>
       </motion.div>
     </AnimatePresence>

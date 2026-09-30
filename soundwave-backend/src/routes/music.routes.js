@@ -47,8 +47,15 @@ router.get(
         const map = new Map(songs.map((x) => [x.saavnId, x]));
         const items = (result.results || []).map((r) => {
           const local = map.get(String(r.id));
-          return local ? catalog.toClientSong(local) : r;
+          return local ? catalog.toClientSong(local) : catalog.toClientSong(catalog.normalizeSong(r));
         });
+        
+        // Persist the upstream ones
+        const upstreamRaw = (result.results || []).filter(r => !map.has(String(r.id)));
+        if (upstreamRaw.length) {
+          catalog.persistSongs(upstreamRaw).catch(() => {});
+        }
+        
         return paginated(res, items, { page, limit, total: result.total || items.length, extra: { scope: 'songs', stale: result.stale, upstream: result.upstream } });
       }
       const result = await catalog.searchGeneric(type, q, { page, limit });
@@ -63,6 +70,10 @@ router.get(
       catalog.searchGeneric('playlists', q, { page, limit: Math.min(limit, 10) }),
     ]);
     await record();
+    
+    if (songs.status === 'fulfilled' && songs.value.results?.length) {
+      catalog.persistSongs(songs.value.results).catch(() => {});
+    }
 
     const unwrap = (r, key) => (r.status === 'fulfilled' ? r.value[key] : []);
     const failures = [songs, albums, artists, playlists].filter((r) => r.status === 'rejected').length;
@@ -70,7 +81,7 @@ router.get(
 
     return ok(res, {
       query: q,
-      songs: unwrap(songs, 'results').map((r) => r),
+      songs: unwrap(songs, 'results').map((r) => catalog.toClientSong(catalog.normalizeSong(r))),
       albums: unwrap(albums, 'results'),
       artists: unwrap(artists, 'results'),
       playlists: unwrap(playlists, 'results'),

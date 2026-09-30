@@ -11,6 +11,8 @@ export interface Song {
   image?: string;
   durationMs?: number;
   language?: string;
+  streamUrl?: string;
+  formats?: any[];
   downloadUrls?: { quality: string; url: string }[];
 }
 
@@ -26,10 +28,15 @@ interface PlayerState {
   showPlayer: boolean;
   showQueue: boolean;
   sessionId: string | null;
+  seekRequestMs: number | null;
 
   setQueue: (songs: Song[], startIndex?: number) => void;
+  appendToQueue: (songs: Song[]) => void;
   setPlaying: (isPlaying: boolean) => void;
+  togglePlay: () => void;
   setPosition: (positionMs: number) => void;
+  seekTo: (ms: number) => void;
+  clearSeek: () => void;
   setDuration: (durationMs: number) => void;
   setRepeat: (mode: RepeatMode) => void;
   setShuffle: (shuffle: boolean) => void;
@@ -53,12 +60,17 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   showPlayer: false,
   showQueue: false,
   sessionId: null,
+  seekRequestMs: null,
 
   setQueue: (songs, startIndex = 0) => {
     set({ queue: songs, currentIndex: startIndex, positionMs: 0, history: [] });
   },
+  appendToQueue: (songs) => set((state) => ({ queue: [...state.queue, ...songs] })),
   setPlaying: (isPlaying) => set({ isPlaying }),
+  togglePlay: () => set((state) => ({ isPlaying: !state.isPlaying })),
   setPosition: (positionMs) => set({ positionMs }),
+  seekTo: (ms) => set({ seekRequestMs: ms, positionMs: ms }),
+  clearSeek: () => set({ seekRequestMs: null }),
   setDuration: (durationMs) => set({ durationMs }),
   setRepeat: (mode) => set({ repeat: mode }),
   setShuffle: (shuffle) => set({ shuffle }),

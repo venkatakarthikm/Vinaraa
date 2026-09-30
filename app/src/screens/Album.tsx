@@ -6,7 +6,6 @@ import { usePlayerStore } from '@/store/player';
 import { SongRowSkeleton } from '@/components/Skeleton';
 import MiniPlayer from '@/components/MiniPlayer';
 import { formatPlayerSong, getArtistsText } from '@/utils/song';
-import { getSongImage } from '@/utils/image';
 
 export default function Album() {
   const { id } = useParams<{ id: string }>();

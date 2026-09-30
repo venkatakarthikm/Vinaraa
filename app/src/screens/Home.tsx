@@ -10,6 +10,7 @@ import { Bell, TrendingUp, Play, ChevronRight } from 'lucide-react';
 import MiniPlayer from '@/components/MiniPlayer';
 import { getSongImage } from '@/utils/image';
 import { formatPlayerSong, getArtistsText } from '@/utils/song';
+import { usePlayerStore } from '@/store/player';
 
 interface FeedRail {
   id: string;

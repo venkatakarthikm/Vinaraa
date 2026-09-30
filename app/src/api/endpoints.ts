@@ -1,4 +1,4 @@
-import { apiClient } from './client';
+import { apiClient, API_BASE } from './client';
 
 // ── Auth ───────────────────────────────────────────────────────────────────
 export const auth = {
@@ -80,9 +80,8 @@ export const music = {
   trending: (language?: string) => apiClient<any>(`/music/trending${language ? `?language=${language}` : ''}`),
   languages: () => apiClient<any>('/music/languages'),
   streamUrl: (id: string, quality?: string, mode?: 'proxy' | 'redirect') => {
-    const base = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1';
     const qs = new URLSearchParams({ ...(quality && { quality }), mode: mode || 'proxy' }).toString();
-    return `${base}/music/stream/${id}?${qs}`;
+    return `${API_BASE}/music/stream/${id}?${qs}`;
   },
 };
 

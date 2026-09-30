@@ -5,6 +5,7 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { ToastContainer } from '@/components/Toast';
 import Navigator from '@/navigation/Navigator';
 import { useNavigate as _useNavigate, useLocation } from 'react-router-dom';
+import { startPlayerEngine } from '@/player/engine';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -33,6 +34,8 @@ function AppWrapper() {
   const location = useLocation();
 
   useEffect(() => {
+    startPlayerEngine();
+    
     const listener = CapacitorApp.addListener('backButton', (_: any) => {
       const path = location.pathname;
       if (MAIN_TABS.includes(path) || path === '/' || path === '/welcome') {
