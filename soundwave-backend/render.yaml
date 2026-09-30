@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: soundwave-api
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm install
+    startCommand: node src/server.js
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: ADMIN_API_KEY
+        generateValue: true
+      - key: UPSTREAM_URLS
+        value: https://jiosaavn-api.apicoolie.workers.dev
+      - key: UPSTREAM_PATH_PREFIX
+        value: /api
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: TRUST_PROXY
+        value: "1"

@@ -1,0 +1,36 @@
+{
+  "name": "soundwave-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Production-grade Node.js + MongoDB backend for the SoundWave Android music streaming app. JioSaavn proxy with hot-swappable upstream pool, JWT auth, playlists, perfect listening-time tracking, analytics and taste-based recommendations. No Redis.",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "seed:upstreams": "node scripts/seed-upstreams.js",
+    "keepalive": "node scripts/keepalive.js",
+    "smoke": "node scripts/smoke-test.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "compression": "^1.7.4",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.4.0",
+    "helmet": "^7.1.0",
+    "hpp": "^0.2.3",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.6.3",
+    "morgan": "^1.10.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "mongodb-memory-server": "^10.0.0",
+    "supertest": "^7.0.0"
+  }
+}

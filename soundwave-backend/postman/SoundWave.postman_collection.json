@@ -1,0 +1,250 @@
+{
+  "info": {
+    "_postman_id": "soundwave-backend-v1",
+    "name": "SoundWave Backend API",
+    "description": "Complete Postman collection for the SoundWave music-streaming backend.\n\nSETUP\n1. Set collection variables: baseUrl, accessToken, refreshToken, adminKey, songId, sessionId, playlistId.\n2. Run Auth → Register, then Auth → Login. The login test script stores the tokens automatically.\n3. Admin requests need the x-admin-key header (adminKey variable).\n\nKEY FLOWS\n• Rotating a dead JioSaavn worker URL: Admin → Add Upstream, then Admin → Health Check.\n• Tracking: Tracking → Start Session, then Heartbeat (repeat), then End Session.\n• Send a heartbeat with a positionMs far ahead of the elapsed wall clock to see the seek guard credit 0 ms.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080", "type": "string" },
+    { "key": "accessToken", "value": "", "type": "string" },
+    { "key": "refreshToken", "value": "", "type": "string" },
+    { "key": "adminKey", "value": "dev-only-admin-key-change-me", "type": "string" },
+    { "key": "songId", "value": "", "type": "string" },
+    { "key": "sessionId", "value": "", "type": "string" },
+    { "key": "playlistId", "value": "", "type": "string" },
+    { "key": "upstreamId", "value": "", "type": "string" },
+    { "key": "deviceId", "value": "postman-device-1", "type": "string" }
+  ],
+  "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+  "item": [
+    {
+      "name": "00 · Health",
+      "item": [
+        { "name": "Health check", "request": { "method": "GET", "url": "{{baseUrl}}/health", "auth": { "type": "noauth" } } },
+        { "name": "Readiness (DB)", "request": { "method": "GET", "url": "{{baseUrl}}/health/ready", "auth": { "type": "noauth" } } },
+        { "name": "Diagnostics (cache + upstream pool)", "request": { "method": "GET", "url": "{{baseUrl}}/health/diagnostics", "auth": { "type": "noauth" } } },
+        { "name": "Live upstream probe", "request": { "method": "GET", "url": "{{baseUrl}}/health/upstream", "auth": { "type": "noauth" } } },
+        { "name": "Live upstream search probe", "request": { "method": "GET", "url": "{{baseUrl}}/health/upstream/search", "auth": { "type": "noauth" } } },
+        { "name": "API route map", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1", "auth": { "type": "noauth" } } }
+      ]
+    },
+    {
+      "name": "01 · Auth",
+      "item": [
+        {
+          "name": "Register",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const b = pm.response.json();", "if (b.data && b.data.tokens) {", "  pm.collectionVariables.set('accessToken', b.data.tokens.accessToken);", "  pm.collectionVariables.set('refreshToken', b.data.tokens.refreshToken);", "}"] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": { "type": "noauth" },
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"you@example.com\",\n  \"password\": \"Passw0rd123\",\n  \"name\": \"Your Name\",\n  \"locale\": \"en-IN\",\n  \"country\": \"IN\",\n  \"timezone\": \"Asia/Kolkata\",\n  \"device\": { \"deviceId\": \"{{deviceId}}\", \"platform\": \"android\", \"model\": \"Pixel 8\", \"osVersion\": \"14\", \"appVersion\": \"1.0.0\" }\n}" },
+            "url": "{{baseUrl}}/api/v1/auth/register"
+          }
+        },
+        {
+          "name": "Login",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const b = pm.response.json();", "if (b.data && b.data.tokens) {", "  pm.collectionVariables.set('accessToken', b.data.tokens.accessToken);", "  pm.collectionVariables.set('refreshToken', b.data.tokens.refreshToken);", "}"] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": { "type": "noauth" },
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"you@example.com\",\n  \"password\": \"Passw0rd123\",\n  \"device\": { \"deviceId\": \"{{deviceId}}\", \"platform\": \"android\" }\n}" },
+            "url": "{{baseUrl}}/api/v1/auth/login"
+          }
+        },
+        {
+          "name": "Refresh (rotates + stores new tokens)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const b = pm.response.json();", "if (b.data && b.data.tokens) {", "  pm.collectionVariables.set('accessToken', b.data.tokens.accessToken);", "  pm.collectionVariables.set('refreshToken', b.data.tokens.refreshToken);", "}"] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": { "type": "noauth" },
+            "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\",\n  \"deviceId\": \"{{deviceId}}\"\n}" },
+            "url": "{{baseUrl}}/api/v1/auth/refresh"
+          }
+        },
+        { "name": "Sessions", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/auth/sessions" } },
+        {
+          "name": "Change password",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"currentPassword\": \"Passw0rd123\",\n  \"newPassword\": \"Passw0rd456\"\n}" },
+            "url": "{{baseUrl}}/api/v1/auth/change-password"
+          }
+        },
+        { "name": "Forgot password", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "auth": { "type": "noauth" }, "body": { "mode": "raw", "raw": "{\n  \"email\": \"you@example.com\"\n}" }, "url": "{{baseUrl}}/api/v1/auth/forgot-password" } },
+        { "name": "Logout", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}" }, "url": "{{baseUrl}}/api/v1/auth/logout" } },
+        { "name": "Logout all devices", "request": { "method": "POST", "url": "{{baseUrl}}/api/v1/auth/logout-all" } }
+      ]
+    },
+    {
+      "name": "02 · User",
+      "item": [
+        { "name": "Me (profile + taste)", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/users/me" } },
+        { "name": "Update profile", "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"New Name\",\n  \"bio\": \"Music lover\"\n}" }, "url": "{{baseUrl}}/api/v1/users/me" } },
+        { "name": "Update preferences", "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"languages\": [\"hindi\", \"punjabi\"],\n  \"audioQuality\": \"veryhigh\",\n  \"autoplay\": true,\n  \"dataSaver\": false,\n  \"crossfadeSeconds\": 6\n}" }, "url": "{{baseUrl}}/api/v1/users/me/preferences" } },
+        { "name": "Replace taste seeds", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"languages\": [\"hindi\"],\n  \"singers\": [{ \"id\": \"456323\", \"name\": \"Pritam\" }],\n  \"musicDirectors\": [{ \"id\": \"456323\", \"name\": \"Pritam\" }],\n  \"actors\": [{ \"id\": \"1001\", \"name\": \"Ranbir Kapoor\" }],\n  \"favouriteMovies\": [{ \"id\": \"38845390\", \"name\": \"Brahmastra\" }]\n}" }, "url": "{{baseUrl}}/api/v1/users/me/taste-seeds" } },
+        { "name": "Register device (push token)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"deviceId\": \"{{deviceId}}\",\n  \"platform\": \"android\",\n  \"pushToken\": \"FCM_TOKEN_HERE\",\n  \"model\": \"Pixel 8\"\n}" }, "url": "{{baseUrl}}/api/v1/users/me/devices" } },
+        { "name": "Search history", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/users/me/search-history" } },
+        { "name": "Record search", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"query\": \"arijit singh\",\n  \"scope\": \"songs\",\n  \"resultCount\": 20\n}" }, "url": "{{baseUrl}}/api/v1/users/me/search-history" } },
+        { "name": "Clear search history", "request": { "method": "DELETE", "url": "{{baseUrl}}/api/v1/users/me/search-history" } },
+        { "name": "Export my data", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/users/me/export" } }
+      ]
+    },
+    {
+      "name": "03 · Onboarding",
+      "item": [
+        { "name": "Bundle (all steps)", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/onboarding/bundle?language=hindi" } },
+        { "name": "Languages", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/onboarding/languages" } },
+        { "name": "Options (singers)", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/onboarding/options?type=singers&language=hindi" } },
+        { "name": "Options (directors)", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/onboarding/options?type=directors&language=hindi" } },
+        { "name": "Options (actors / heroes)", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/onboarding/options?type=actors&language=hindi" } },
+        { "name": "Options (movies)", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/onboarding/options?type=movies&language=hindi" } },
+        { "name": "Options search", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/onboarding/options?type=singers&q=arijit" } },
+        { "name": "Status", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/onboarding/status" } },
+        { "name": "Complete", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"languages\": [\"hindi\", \"punjabi\"],\n  \"singers\": [{ \"id\": \"456323\", \"name\": \"Pritam\" }],\n  \"musicDirectors\": [{ \"id\": \"456323\", \"name\": \"Pritam\" }],\n  \"actors\": [{ \"id\": \"1001\", \"name\": \"Ranbir Kapoor\" }],\n  \"favouriteMovies\": [{ \"id\": \"38845390\", \"name\": \"Brahmastra\" }],\n  \"skipped\": false\n}" }, "url": "{{baseUrl}}/api/v1/onboarding/complete" } }
+      ]
+    },
+    {
+      "name": "04 · Music",
+      "item": [
+        {
+          "name": "Search songs (stores songId)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const b = pm.response.json();", "if (b.data && b.data[0] && b.data[0].id) pm.collectionVariables.set('songId', b.data[0].id);"] } }],
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/music/search?q=kesariya&type=songs&limit=10" }
+        },
+        { "name": "Search all (songs+albums+artists+playlists)", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/music/search?q=brahmastra&type=all&limit=5" } },
+        { "name": "Search albums", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/music/search?q=animal&type=albums&limit=5" } },
+        { "name": "Search artists", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/music/search?q=arijit&type=artists&limit=5" } },
+        { "name": "Search playlists", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/music/search?q=romantic&type=playlists&limit=5" } },
+        { "name": "Suggestions", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/music/search/suggestions?q=kesa" } },
+        { "name": "Song detail", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/music/songs/{{songId}}" } },
+        { "name": "Songs bulk", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/music/songs?ids={{songId}},3IoDK8qI" } },
+        { "name": "Lyrics", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/music/songs/{{songId}}/lyrics" } },
+        { "name": "Similar songs", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/music/songs/{{songId}}/similar" } },
+        { "name": "Album", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/music/albums/38845390" } },
+        { "name": "Artist", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/music/artists/459320" } },
+        { "name": "Editorial playlist", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/music/editorial/playlists/110858205" } },
+        { "name": "Modules (home rails)", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/music/modules?languages=hindi,punjabi" } },
+        { "name": "Trending", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/music/trending?limit=20" } },
+        { "name": "Languages", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/music/languages" } },
+        { "name": "Stream (proxy, Range-friendly)", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/music/stream/{{songId}}?mode=proxy&quality=320kbps" } },
+        { "name": "Stream (302 redirect to CDN)", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/music/stream/{{songId}}?mode=redirect" } }
+      ]
+    },
+    {
+      "name": "05 · Playlists",
+      "item": [
+        { "name": "List", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/playlists" } },
+        {
+          "name": "Create (auto-named)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const b = pm.response.json();", "if (b.data && b.data.id) pm.collectionVariables.set('playlistId', b.data.id);"] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{}" }, "url": "{{baseUrl}}/api/v1/playlists" }
+        },
+        { "name": "Create (named)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Night Drive\",\n  \"description\": \"Late night songs\",\n  \"visibility\": \"private\",\n  \"trackIds\": []\n}" }, "url": "{{baseUrl}}/api/v1/playlists" } },
+        { "name": "Name suggestion", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/playlists/name-suggestion" } },
+        { "name": "Get playlist", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/playlists/{{playlistId}}" } },
+        { "name": "Add tracks", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"songIds\": [\"{{songId}}\"],\n  \"source\": \"manual\"\n}" }, "url": "{{baseUrl}}/api/v1/playlists/{{playlistId}}/tracks" } },
+        { "name": "Remove tracks", "request": { "method": "DELETE", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"songIds\": [\"{{songId}}\"]\n}" }, "url": "{{baseUrl}}/api/v1/playlists/{{playlistId}}/tracks" } },
+        { "name": "Reorder", "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"from\": 0,\n  \"to\": 1\n}" }, "url": "{{baseUrl}}/api/v1/playlists/{{playlistId}}/reorder" } },
+        { "name": "Save song to playlist (sheet flow)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"songId\": \"{{songId}}\",\n  \"playlistId\": \"{{playlistId}}\"\n}" }, "url": "{{baseUrl}}/api/v1/playlists/save-song" } },
+        { "name": "Like / unlike (toggle)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"songId\": \"{{songId}}\"\n}" }, "url": "{{baseUrl}}/api/v1/playlists/liked" } },
+        { "name": "Is liked", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/playlists/liked/{{songId}}" } },
+        { "name": "Liked songs playlist", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/playlists/liked" } },
+        { "name": "System playlists", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/playlists/system" } },
+        { "name": "Refresh Taste Mix", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"limit\": 40\n}" }, "url": "{{baseUrl}}/api/v1/playlists/system/taste-mix/refresh" } },
+        { "name": "Refresh On Repeat", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"limit\": 30\n}" }, "url": "{{baseUrl}}/api/v1/playlists/system/on-repeat/refresh" } },
+        { "name": "Public playlists", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/playlists/public" } },
+        { "name": "Duplicate", "request": { "method": "POST", "url": "{{baseUrl}}/api/v1/playlists/{{playlistId}}/duplicate" } }
+      ]
+    },
+    {
+      "name": "06 · Tracking",
+      "item": [
+        {
+          "name": "Start session",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const b = pm.response.json();", "if (b.data && b.data.sessionId) pm.collectionVariables.set('sessionId', b.data.sessionId);"] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"songId\": \"{{songId}}\",\n  \"deviceId\": \"{{deviceId}}\",\n  \"source\": \"recommendation\",\n  \"positionMs\": 0\n}" }, "url": "{{baseUrl}}/api/v1/tracking/sessions" }
+        },
+        { "name": "Heartbeat (honest playback)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"positionMs\": 15000,\n  \"state\": \"playing\"\n}" }, "url": "{{baseUrl}}/api/v1/tracking/sessions/{{sessionId}}/heartbeat" } },
+        { "name": "Heartbeat (SEEK TO END → credits 0)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"positionMs\": 240000,\n  \"state\": \"playing\"\n}" }, "url": "{{baseUrl}}/api/v1/tracking/sessions/{{sessionId}}/heartbeat" } },
+        { "name": "Heartbeat (paused → credits 0)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"positionMs\": 15000,\n  \"state\": \"paused\"\n}" }, "url": "{{baseUrl}}/api/v1/tracking/sessions/{{sessionId}}/heartbeat" } },
+        { "name": "End session", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"positionMs\": 240000\n}" }, "url": "{{baseUrl}}/api/v1/tracking/sessions/{{sessionId}}/end" } },
+        { "name": "Session event (like/skip/queue)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"eventType\": \"queue_add\",\n  \"positionMs\": 5000\n}" }, "url": "{{baseUrl}}/api/v1/tracking/sessions/{{sessionId}}/events" } },
+        { "name": "Active sessions", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/tracking/sessions/active" } },
+        { "name": "Offline sync (batch)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"sessions\": [\n    {\n      \"localId\": \"local-1\",\n      \"songId\": \"{{songId}}\",\n      \"startedAt\": \"2026-09-30T10:00:00.000Z\",\n      \"endedAt\": \"2026-09-30T10:03:20.000Z\",\n      \"listenedMs\": 200000,\n      \"durationMs\": 240000,\n      \"completed\": false\n    }\n  ],\n  \"searchHistory\": [{ \"query\": \"arijit singh\" }]\n}" }, "url": "{{baseUrl}}/api/v1/tracking/sync" } }
+      ]
+    },
+    {
+      "name": "07 · Recommendations",
+      "item": [
+        { "name": "Home feed", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/recommendations/feed?limit=20" } },
+        { "name": "For you (explained % match)", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/recommendations/for-you?limit=30" } },
+        { "name": "For you (language filter)", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/recommendations/for-you?limit=20&language=punjabi" } },
+        { "name": "Next up (autoplay)", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/recommendations/next?currentSongId={{songId}}&limit=5" } },
+        { "name": "Radio from song", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/recommendations/radio?songId={{songId}}&limit=30" } },
+        { "name": "Radio from entity (actor)", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/recommendations/radio?entityId=1001&entityType=actor&limit=30" } },
+        { "name": "Entity page (hero/actor)", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/recommendations/entity/actor/1001" } },
+        { "name": "Entity page (music director)", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/recommendations/entity/musicDirector/456323" } },
+        { "name": "Taste profile", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/recommendations/taste-profile" } }
+      ]
+    },
+    {
+      "name": "08 · Stats",
+      "item": [
+        { "name": "Dashboard (everything)", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/stats/dashboard?range=30d" } },
+        { "name": "Overview", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/stats/overview?range=30d" } },
+        { "name": "Top songs", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/stats/top?type=songs&range=30d&limit=20" } },
+        { "name": "Top movies", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/stats/top?type=movies&range=30d&limit=20" } },
+        { "name": "Top singers", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/stats/top?type=singers&range=30d&limit=20" } },
+        { "name": "Top directors", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/stats/top?type=directors&range=30d&limit=20" } },
+        { "name": "Top actors (heroes)", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/stats/top?type=actors&range=30d&limit=20" } },
+        { "name": "Top languages", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/stats/top?type=languages&range=30d&limit=20" } },
+        { "name": "Timeline", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/stats/timeline?range=30d" } },
+        { "name": "Heatmap", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/stats/heatmap?range=90d" } },
+        { "name": "Listening quality", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/stats/quality?range=30d" } },
+        { "name": "Insights", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/stats/insights" } },
+        { "name": "Recently played", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/stats/recently-played?limit=30" } },
+        { "name": "Play history (events)", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/stats/history?limit=50" } },
+        { "name": "Play history (sessions, seek-proof)", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/stats/history/sessions?limit=50" } },
+        { "name": "Verify tracking maths", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"durationMs\": 240000,\n  \"steps\": [\n    { \"positionMs\": 20000, \"state\": \"playing\", \"afterMs\": 20000 },\n    { \"positionMs\": 240000, \"state\": \"playing\", \"afterMs\": 1000 }\n  ]\n}" }, "url": "{{baseUrl}}/api/v1/stats/verify-tracking" } }
+      ]
+    },
+    {
+      "name": "09 · Notifications",
+      "item": [
+        { "name": "Settings", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/notifications/settings" } },
+        { "name": "Register device", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"deviceId\": \"{{deviceId}}\",\n  \"platform\": \"android\",\n  \"pushToken\": \"FCM_TOKEN_HERE\"\n}" }, "url": "{{baseUrl}}/api/v1/notifications/devices" } },
+        { "name": "Update settings", "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"deviceId\": \"{{deviceId}}\",\n  \"notificationsEnabled\": true,\n  \"liveActivityEnabled\": true\n}" }, "url": "{{baseUrl}}/api/v1/notifications/settings" } },
+        { "name": "Send test", "request": { "method": "POST", "url": "{{baseUrl}}/api/v1/notifications/test" } }
+      ]
+    },
+    {
+      "name": "10 · Admin (x-admin-key)",
+      "item": [
+        { "name": "List upstreams", "request": { "method": "GET", "header": [{ "key": "x-admin-key", "value": "{{adminKey}}" }], "url": "{{baseUrl}}/api/v1/admin/upstreams" } },
+        {
+          "name": "Add upstream (rotate worker URL)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const b = pm.response.json();", "if (b.data && b.data.upstream) pm.collectionVariables.set('upstreamId', b.data.upstream.id);"] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "x-admin-key", "value": "{{adminKey}}" }], "body": { "mode": "raw", "raw": "{\n  \"url\": \"https://my-new-worker.workers.dev\",\n  \"pathPrefix\": \"/api\",\n  \"priority\": 1,\n  \"notes\": \"replacement worker\"\n}" }, "url": "{{baseUrl}}/api/v1/admin/upstreams" }
+        },
+        { "name": "Patch upstream (disable / reprioritise)", "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "x-admin-key", "value": "{{adminKey}}" }], "body": { "mode": "raw", "raw": "{\n  \"enabled\": false,\n  \"priority\": 99\n}" }, "url": "{{baseUrl}}/api/v1/admin/upstreams/{{upstreamId}}" } },
+        { "name": "Delete upstream", "request": { "method": "DELETE", "header": [{ "key": "x-admin-key", "value": "{{adminKey}}" }], "url": "{{baseUrl}}/api/v1/admin/upstreams/{{upstreamId}}" } },
+        { "name": "Health-check all upstreams", "request": { "method": "POST", "header": [{ "key": "x-admin-key", "value": "{{adminKey}}" }], "url": "{{baseUrl}}/api/v1/admin/upstreams/health-check" } },
+        { "name": "Optimize pool order", "request": { "method": "POST", "header": [{ "key": "x-admin-key", "value": "{{adminKey}}" }], "url": "{{baseUrl}}/api/v1/admin/upstreams/optimize" } },
+        { "name": "Upstream stats", "request": { "method": "GET", "header": [{ "key": "x-admin-key", "value": "{{adminKey}}" }], "url": "{{baseUrl}}/api/v1/admin/upstreams/stats" } },
+        { "name": "Platform stats", "request": { "method": "GET", "header": [{ "key": "x-admin-key", "value": "{{adminKey}}" }], "url": "{{baseUrl}}/api/v1/admin/stats" } },
+        { "name": "Users", "request": { "method": "GET", "header": [{ "key": "x-admin-key", "value": "{{adminKey}}" }], "url": "{{baseUrl}}/api/v1/admin/users?limit=20" } },
+        { "name": "Ensure indexes", "request": { "method": "POST", "header": [{ "key": "x-admin-key", "value": "{{adminKey}}" }], "url": "{{baseUrl}}/api/v1/admin/maintenance/ensure-indexes" } },
+        { "name": "Sweep cache", "request": { "method": "POST", "header": [{ "key": "x-admin-key", "value": "{{adminKey}}" }], "url": "{{baseUrl}}/api/v1/admin/maintenance/sweep-cache" } },
+        { "name": "Reap stale sessions", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "x-admin-key", "value": "{{adminKey}}" }], "body": { "mode": "raw", "raw": "{\n  \"maxAgeMinutes\": 30\n}" }, "url": "{{baseUrl}}/api/v1/admin/maintenance/reap-stale-sessions" } },
+        { "name": "Refresh catalogue", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "x-admin-key", "value": "{{adminKey}}" }], "body": { "mode": "raw", "raw": "{\n  \"limit\": 25\n}" }, "url": "{{baseUrl}}/api/v1/admin/maintenance/refresh-catalogue" } },
+        { "name": "Rebuild system playlists", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "x-admin-key", "value": "{{adminKey}}" }], "body": { "mode": "raw", "raw": "{\n  \"limit\": 50\n}" }, "url": "{{baseUrl}}/api/v1/admin/maintenance/rebuild-system-playlists" } },
+        { "name": "Recompute trending", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "x-admin-key", "value": "{{adminKey}}" }], "body": { "mode": "raw", "raw": "{\n  \"days\": 7\n}" }, "url": "{{baseUrl}}/api/v1/admin/maintenance/recompute-trending" } }
+      ]
+    }
+  ]
+}
