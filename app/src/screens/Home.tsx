@@ -12,6 +12,10 @@ import { getSongImage } from '@/utils/image';
 import { formatPlayerSong, getArtistsText } from '@/utils/song';
 import { usePlayerStore } from '@/store/player';
 
+function uniqName(song: any) {
+  return (song.name || '').split('(')[0].split('[')[0].trim().toLowerCase();
+}
+
 interface FeedRail {
   id: string;
   title: string;
@@ -144,7 +148,7 @@ export default function Home() {
             </div>
           ) : (
             <div className="flex gap-4 px-5 overflow-x-auto scroll-x pb-2">
-              {trending.filter((v, i, a) => a.findIndex(t => (t.id || t.saavnId || t._id) === (v.id || v.saavnId || v._id)) === i).slice(0, 10).map((song, i) => (
+              {trending.filter((v, i, a) => a.findIndex(t => (t.id || t.saavnId || t._id) === (v.id || v.saavnId || v._id) || uniqName(t) === uniqName(v)) === i).slice(0, 10).map((song, i) => (
                 <SongCard key={song.id || song.saavnId} song={song} onPlay={handlePlay} index={i} />
               ))}
             </div>
@@ -160,7 +164,7 @@ export default function Home() {
           feed.map((rail) => (
             <div key={rail.id} className="mt-6">
               <h2 className="text-text font-bold px-5 mb-3">{rail.title}</h2>
-              {rail.items.filter((v: any, i: number, a: any[]) => a.findIndex(t => (t.id || t.saavnId || t._id) === (v.id || v.saavnId || v._id)) === i).slice(0, 8).map((song: any, i: number) => (
+              {rail.items.filter((v: any, i: number, a: any[]) => a.findIndex(t => (t.id || t.saavnId || t._id) === (v.id || v.saavnId || v._id) || uniqName(t) === uniqName(v)) === i).slice(0, 8).map((song: any, i: number) => (
                 <SongRow key={song.id || song.saavnId} song={song} index={i} onPlay={handlePlay} />
               ))}
             </div>
@@ -170,7 +174,7 @@ export default function Home() {
         {!loading && feed.length === 0 && trending.length > 0 && (
           <div className="mt-6">
             <h2 className="text-text font-bold px-5 mb-3">Top Songs</h2>
-            {trending.filter((v, i, a) => a.findIndex(t => (t.id || t.saavnId || t._id) === (v.id || v.saavnId || v._id)) === i).slice(0, 20).map((song, i) => (
+            {trending.filter((v, i, a) => a.findIndex(t => (t.id || t.saavnId || t._id) === (v.id || v.saavnId || v._id) || uniqName(t) === uniqName(v)) === i).slice(0, 20).map((song, i) => (
               <SongRow key={song.id || song.saavnId} song={song} index={i} onPlay={handlePlay} />
             ))}
           </div>

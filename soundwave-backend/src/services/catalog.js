@@ -393,7 +393,8 @@ async function getModules(languages = ['hindi'], { limit = 10 } = {}) {
       const songs = list.filter((x) => x.type === 'song' || x.downloadUrl).slice(0, limit);
       if (songs.length) {
         await persistSongs(songs);
-        rails.push({ key: key2, title: key2.replace(/^\w/, (c) => c.toUpperCase()), type: 'songs', items: songs });
+        const clientItems = songs.map(s => toClientSong(normalizeSong(s))).filter(Boolean);
+        rails.push({ key: key2, title: key2.replace(/^\w/, (c) => c.toUpperCase()), type: 'songs', items: clientItems });
       }
     }
     // Some deployments return a flat array of playlists/albums instead.

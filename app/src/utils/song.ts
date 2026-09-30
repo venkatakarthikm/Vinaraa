@@ -24,5 +24,9 @@ export function formatPlayerSong(song: any) {
     language: song?.language,
     streamUrl: song?.audio?.best || '',
     formats: song?.audio?.formats || [],
+    singers: song?.singers || [],
+    musicDirectors: song?.musicDirectors || [],
+    actors: song?.actors || [],
+    lyricists: song?.lyricists || [],
   };
 }

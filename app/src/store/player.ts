@@ -14,6 +14,10 @@ export interface Song {
   streamUrl?: string;
   formats?: any[];
   downloadUrls?: { quality: string; url: string }[];
+  singers?: { id: string; name: string }[];
+  musicDirectors?: { id: string; name: string }[];
+  actors?: { id: string; name: string }[];
+  lyricists?: { id: string; name: string }[];
 }
 
 interface PlayerState {

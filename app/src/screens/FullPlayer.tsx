@@ -38,14 +38,14 @@ export default function FullPlayer() {
     if (!song?.id) return;
     tracking.startSession(song.id).then((s) => setSessionId(s.sessionId)).catch(() => {});
     return () => {
-      if (sessionId) tracking.endSession(sessionId, positionRef.current).catch(() => {});
+      if (sessionId) tracking.endSession(sessionId, Math.round(positionRef.current)).catch(() => {});
     };
   }, [song?.id]);
 
   useEffect(() => {
     if (!sessionId) return;
     heartbeatRef.current = setInterval(() => {
-      tracking.heartbeat(sessionId, { positionMs: positionRef.current, state: isPlaying ? 'playing' : 'paused' }).catch(() => {});
+      tracking.heartbeat(sessionId, { positionMs: Math.round(positionRef.current), state: isPlaying ? 'playing' : 'paused' }).catch(() => {});
     }, 12000);
     return () => { if (heartbeatRef.current) clearInterval(heartbeatRef.current); };
   }, [sessionId, isPlaying]);
@@ -178,10 +178,65 @@ export default function FullPlayer() {
           )}
           {playerTab === 'info' && (
             <motion.div key="info" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="h-full overflow-y-auto scroll-y py-4 flex flex-col gap-4">
-              {song.album && <div><p className="text-muted text-xs mb-1">Album</p><p className="text-text font-semibold">{song.album}</p></div>}
-              {song.language && <div><p className="text-muted text-xs mb-1">Language</p><p className="text-text font-semibold capitalize">{song.language}</p></div>}
-              <div><p className="text-muted text-xs mb-1">Duration</p><p className="text-text font-semibold">{formatTime(durationMs)}</p></div>
+              className="h-full overflow-y-auto scroll-y py-4 flex flex-col gap-6 px-2 pb-32">
+              {song.album && (
+                <div>
+                  <p className="text-muted text-xs uppercase tracking-wider mb-1">Album / Movie</p>
+                  <p className="text-text font-semibold text-lg">{song.album}</p>
+                </div>
+              )}
+              {song.singers && song.singers.length > 0 && (
+                <div>
+                  <p className="text-muted text-xs uppercase tracking-wider mb-1">Singer(s)</p>
+                  <div className="flex flex-wrap gap-2 mt-1.5">
+                    {song.singers.map((a: any) => (
+                      <span key={a.id} className="bg-surface-2 text-text px-3 py-1.5 rounded-full text-sm font-medium">{a.name}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {song.musicDirectors && song.musicDirectors.length > 0 && (
+                <div>
+                  <p className="text-muted text-xs uppercase tracking-wider mb-1">Music Director</p>
+                  <div className="flex flex-wrap gap-2 mt-1.5">
+                    {song.musicDirectors.map((a: any) => (
+                      <span key={a.id} className="bg-surface-2 text-text px-3 py-1.5 rounded-full text-sm font-medium">{a.name}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {song.actors && song.actors.length > 0 && (
+                <div>
+                  <p className="text-muted text-xs uppercase tracking-wider mb-1">Cast / Actors</p>
+                  <div className="flex flex-wrap gap-2 mt-1.5">
+                    {song.actors.map((a: any) => (
+                      <span key={a.id} className="bg-surface-2 text-text px-3 py-1.5 rounded-full text-sm font-medium">{a.name}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {song.lyricists && song.lyricists.length > 0 && (
+                <div>
+                  <p className="text-muted text-xs uppercase tracking-wider mb-1">Lyricist</p>
+                  <div className="flex flex-wrap gap-2 mt-1.5">
+                    {song.lyricists.map((a: any) => (
+                      <span key={a.id} className="bg-surface-2 text-text px-3 py-1.5 rounded-full text-sm font-medium">{a.name}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="flex gap-8">
+                {song.language && (
+                  <div>
+                    <p className="text-muted text-xs uppercase tracking-wider mb-1">Language</p>
+                    <p className="text-text font-semibold capitalize">{song.language}</p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-muted text-xs uppercase tracking-wider mb-1">Duration</p>
+                  <p className="text-text font-semibold">{formatTime(durationMs)}</p>
+                </div>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
