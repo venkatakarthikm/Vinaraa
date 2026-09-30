@@ -5,6 +5,8 @@ import { ChevronLeft, Play, Heart } from 'lucide-react';
 import { usePlayerStore } from '@/store/player';
 import { SongRowSkeleton } from '@/components/Skeleton';
 import MiniPlayer from '@/components/MiniPlayer';
+import { formatPlayerSong } from '@/utils/song';
+import { getSongImage } from '@/utils/image';
 
 export default function Artist() {
   const { id } = useParams<{ id: string }>();
@@ -25,13 +27,7 @@ export default function Artist() {
 
   const handlePlay = (idx = 0) => {
     if (!allSongs.length) return;
-    const songs = allSongs.map((s: any) => ({
-      id: s.id || s.saavnId,
-      name: s.name,
-      artist: artist?.name,
-      image: s.image,
-      durationMs: s.durationMs,
-    }));
+    const songs = allSongs.map((s: any) => formatPlayerSong(s));
     setQueue(songs, idx);
     setShowPlayer(true);
     navigate('/player');
@@ -74,7 +70,7 @@ export default function Artist() {
                 <button key={song.id || song.saavnId} onClick={() => handlePlay(i)}
                   className="flex items-center gap-3 py-3 w-full">
                   <div className="w-12 h-12 rounded-xl overflow-hidden flex-shrink-0 bg-surface-2">
-                    {song.image && <img src={song.image} alt={song.name} className="w-full h-full object-cover" />}
+                    {getSongImage(song) && <img src={getSongImage(song)} alt={song.name} className="w-full h-full object-cover" />}
                   </div>
                   <div className="flex-1 min-w-0 text-left">
                     <p className="text-text text-sm font-semibold line-clamp-1">{song.name}</p>

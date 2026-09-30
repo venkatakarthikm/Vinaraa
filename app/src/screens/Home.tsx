@@ -8,19 +8,13 @@ import { useNavigate } from 'react-router-dom';
 import { SongRowSkeleton, CardSkeleton } from '@/components/Skeleton';
 import { Bell, TrendingUp, Play, ChevronRight } from 'lucide-react';
 import MiniPlayer from '@/components/MiniPlayer';
+import { getSongImage } from '@/utils/image';
+import { formatPlayerSong, getArtistsText } from '@/utils/song';
 
 interface FeedRail {
   id: string;
   title: string;
   items: any[];
-}
-
-function getArtistsText(song: any) {
-  if (song.artistsText) return song.artistsText;
-  const list = song.singers || song.primaryArtists || song.artists;
-  if (typeof list === 'string') return list;
-  if (Array.isArray(list)) return list.map((a: any) => typeof a === 'string' ? a : a.name).filter(Boolean).join(', ');
-  return 'Unknown Artist';
 }
 
 function getGreeting() {
@@ -37,7 +31,7 @@ function SongCard({ song, onPlay, index }: { song: any; onPlay: (s: any) => void
       whileTap={{ scale: 0.97 }} onClick={() => onPlay(song)} className="flex-shrink-0 w-36"
     >
       <div className="relative w-36 h-36 rounded-2xl overflow-hidden mb-2">
-        {song.image ? <img src={song.image} alt={song.name} className="w-full h-full object-cover" />
+        {getSongImage(song) ? <img src={getSongImage(song)} alt={song.name} className="w-full h-full object-cover" />
           : <div className="w-full h-full bg-surface-2 flex items-center justify-center"><Play size={24} className="text-muted" /></div>}
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
         <div className="absolute bottom-2 right-2 bg-primary/80 rounded-full p-1.5">
@@ -64,7 +58,7 @@ function SongRow({ song, index, onPlay }: { song: any; index: number; onPlay: (s
       whileTap={{ scale: 0.98 }} onClick={() => onPlay(song)} className="flex items-center gap-3 px-4 py-3 w-full"
     >
       <div className="w-12 h-12 rounded-xl overflow-hidden flex-shrink-0 bg-surface-2">
-        {song.image && <img src={song.image} alt={song.name} className="w-full h-full object-cover" />}
+        {getSongImage(song) && <img src={getSongImage(song)} alt={song.name} className="w-full h-full object-cover" />}
       </div>
       <div className="flex-1 min-w-0 text-left">
         <p className="text-text text-sm font-semibold line-clamp-1">{song.name}</p>
@@ -107,13 +101,7 @@ export default function Home() {
   useEffect(() => { loadData(); }, []);
 
   const handlePlay = (song: any) => {
-    const playerSong = {
-      id: song.id || song.saavnId || song._id,
-      name: song.name,
-      artist: getArtistsText(song),
-      image: song.image,
-      durationMs: song.durationMs,
-    };
+    const playerSong = formatPlayerSong(song);
     usePlayerStore.getState().setQueue([playerSong]);
     usePlayerStore.getState().setShowPlayer(true);
     navigate(`/player/${playerSong.id}`, { state: { song } });

@@ -50,9 +50,34 @@ export default function FullPlayer() {
     return () => { if (heartbeatRef.current) clearInterval(heartbeatRef.current); };
   }, [sessionId, isPlaying]);
 
+  const loadLrclib = async (songName: string, artistName: string) => {
+    try {
+      const name = songName.replace(/\s*[\(\[].*?[\)\]]/g, '');
+      const url = `https://lrclib.net/api/search?track_name=${encodeURIComponent(name)}&artist_name=${encodeURIComponent(artistName)}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const hit = data.find((x: any) => x.syncedLyrics) || data.find((x: any) => x.plainLyrics);
+      if (hit) {
+        if (hit.syncedLyrics) {
+          const parsed = hit.syncedLyrics.split('\n').map((l: string) => {
+            const m = l.match(/^\[(\d+):(\d+(?:\.\d+)?)\](.*)/);
+            return m ? { t: +m[1] * 60 + +m[2], x: m[3].trim() || '♪' } : null;
+          }).filter(Boolean);
+          setLyrics({ type: 'synced', lines: parsed });
+        } else {
+          setLyrics({ type: 'plain', lyrics: hit.plainLyrics });
+        }
+      } else {
+        setLyrics({ lyrics: 'No lyrics found.' });
+      }
+    } catch {
+      setLyrics({ lyrics: 'Lyrics unavailable.' });
+    }
+  };
+
   useEffect(() => {
     if (playerTab === 'lyrics' && song?.id && !lyrics) {
-      music.lyrics(song.id).then((l) => setLyrics(l)).catch(() => {});
+      loadLrclib(song.name, song.artist.split(',')[0]);
     }
   }, [playerTab, song?.id]);
 
@@ -140,10 +165,22 @@ export default function FullPlayer() {
           )}
           {playerTab === 'lyrics' && (
             <motion.div key="lyrics" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="h-full overflow-y-auto scroll-y text-center py-4">
+              className="h-full overflow-y-auto scroll-y text-center py-4 px-2">
               {!lyrics ? <p className="text-muted pt-20">Loading lyrics…</p>
-                : lyrics.lyrics ? <pre className="text-text/80 font-sans text-base leading-9 whitespace-pre-wrap">{lyrics.lyrics}</pre>
-                : <p className="text-muted pt-20">Lyrics not available</p>}
+                : lyrics.type === 'synced' ? (
+                  <div className="flex flex-col gap-3 pb-32 pt-16">
+                    {lyrics.lines.map((l: any, i: number) => {
+                      const isActive = (positionMs / 1000) >= l.t && (i === lyrics.lines.length - 1 || (positionMs / 1000) < lyrics.lines[i + 1].t);
+                      return (
+                        <p key={i} className={`text-lg font-bold transition-all duration-300 ${isActive ? 'text-primary-soft scale-110' : 'text-text/40'}`}>
+                          {l.x}
+                        </p>
+                      );
+                    })}
+                  </div>
+                ) : lyrics.lyrics ? (
+                  <pre className="text-text/80 font-sans text-base leading-9 whitespace-pre-wrap pb-32 pt-4">{lyrics.lyrics}</pre>
+                ) : <p className="text-muted pt-20">Lyrics not available</p>}
             </motion.div>
           )}
           {playerTab === 'info' && (

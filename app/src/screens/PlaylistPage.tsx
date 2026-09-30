@@ -5,6 +5,8 @@ import { ChevronLeft, Play, Shuffle, Trash2, Globe } from 'lucide-react';
 import { usePlayerStore } from '@/store/player';
 import { SongRowSkeleton } from '@/components/Skeleton';
 import MiniPlayer from '@/components/MiniPlayer';
+import { formatPlayerSong, getArtistsText } from '@/utils/song';
+import { getSongImage } from '@/utils/image';
 
 export default function PlaylistPage() {
   const [_id] = useState('');
@@ -22,13 +24,7 @@ export default function PlaylistPage() {
 
   const handlePlay = (startIndex = 0) => {
     if (!playlist?.songs?.length) return;
-    const songs = playlist.songs.map((s: any) => ({
-      id: s.id || s.saavnId,
-      name: s.name,
-      artist: (s.singers || s.artists || []).map((a: any) => a.name).join(', '),
-      image: s.image,
-      durationMs: s.durationMs,
-    }));
+    const songs = playlist.songs.map((s: any) => formatPlayerSong(s));
     setQueue(songs, startIndex);
     setShowPlayer(true);
     navigate('/player');
@@ -78,12 +74,12 @@ export default function PlaylistPage() {
                 <div key={song.id || song.saavnId} className="flex items-center gap-3 py-3">
                   <button onClick={() => handlePlay(i)} className="flex items-center gap-3 flex-1 min-w-0">
                     <div className="w-12 h-12 rounded-xl overflow-hidden flex-shrink-0 bg-surface-2">
-                      {song.image && <img src={song.image} alt={song.name} className="w-full h-full object-cover" />}
+                      {getSongImage(song) && <img src={getSongImage(song)} alt={song.name} className="w-full h-full object-cover" />}
                     </div>
                     <div className="flex-1 min-w-0 text-left">
                       <p className="text-text text-sm font-semibold line-clamp-1">{song.name}</p>
                       <p className="text-muted text-xs line-clamp-1">
-                        {(song.singers || song.artists || []).map((a: any) => a.name).join(', ')}
+                        {getArtistsText(song)}
                       </p>
                     </div>
                   </button>

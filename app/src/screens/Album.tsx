@@ -5,6 +5,8 @@ import { ChevronLeft, Play, Shuffle } from 'lucide-react';
 import { usePlayerStore } from '@/store/player';
 import { SongRowSkeleton } from '@/components/Skeleton';
 import MiniPlayer from '@/components/MiniPlayer';
+import { formatPlayerSong, getArtistsText } from '@/utils/song';
+import { getSongImage } from '@/utils/image';
 
 export default function Album() {
   const { id } = useParams<{ id: string }>();
@@ -21,10 +23,7 @@ export default function Album() {
 
   const handlePlay = (startIndex = 0) => {
     if (!album?.songs?.length) return;
-    const songs = album.songs.map((s: any) => ({
-      id: s.id || s.saavnId,
-      name: s.name,
-      artist: (s.singers || s.artists || []).map((a: any) => a.name).join(', '),
+    const songs = album.songs.map((s: any) => formatPlayerSong(s));
       album: album.name,
       albumId: album.id,
       image: s.image,
@@ -99,7 +98,7 @@ export default function Album() {
                 <div className="flex-1 min-w-0 text-left">
                   <p className="text-text text-sm font-semibold line-clamp-1">{song.name}</p>
                   <p className="text-muted text-xs line-clamp-1">
-                    {(song.singers || song.artists || []).map((a: any) => a.name).join(', ')}
+                    {getArtistsText(song)}
                   </p>
                 </div>
                 <span className="text-muted text-xs flex-shrink-0">
