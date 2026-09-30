@@ -5,6 +5,7 @@ import { formatPlayerSong } from '@/utils/song';
 
 let started = false;
 let loadedId: string | null = null;
+let fetchingMore = false;
 
 export function startPlayerEngine() {
   if (started) return;
@@ -27,6 +28,20 @@ export function startPlayerEngine() {
       await VinaraaPlayer.seekTo({ positionMs: s.seekRequestMs });
       s.clearSeek();
     }
+    
+    // continuous listening: pre-fetch when 2 tracks remain
+    if (s.queue.length - s.currentIndex <= 2 && !fetchingMore && s.queue.length > 0) {
+      fetchingMore = true;
+      const cur = s.queue[s.queue.length - 1];
+      recommendations.next(cur.id).then(rec => {
+        const items = (rec?.items || rec?.songs || []).map(formatPlayerSong);
+        // filter out songs already in the queue
+        const newItems = items.filter((item: any) => !usePlayerStore.getState().queue.some(q => q.id === item.id));
+        if (newItems.length) {
+          usePlayerStore.getState().appendToQueue(newItems);
+        }
+      }).finally(() => { fetchingMore = false; });
+    }
   });
 
   // 2) native -> store
@@ -46,12 +61,6 @@ export function startPlayerEngine() {
 
 async function onEnded() {
   const s = usePlayerStore.getState();
-  const last = s.currentIndex >= s.queue.length - 1;
   if (s.repeat === 'one') { loadedId = null; s.nextTrack(); return; }
-  if (!last || s.repeat === 'all') { s.nextTrack(); return; }
-  // continuous listening: queue finished -> ask backend for what plays next
-  const cur = s.queue[s.currentIndex];
-  const rec = await recommendations.next(cur.id).catch(() => null);
-  const items = (rec?.items || rec?.songs || []).map(formatPlayerSong);
-  if (items.length) { s.appendToQueue(items); s.nextTrack(); }
+  s.nextTrack();
 }

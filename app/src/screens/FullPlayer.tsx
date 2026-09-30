@@ -126,6 +126,40 @@ export default function FullPlayer() {
     if (info.offset.x > 40 && idx > 0) setPlayerTab(TABS[idx - 1]);
   };
 
+  const handleShare = async () => {
+    if (!song) return;
+    try {
+      const shareData = {
+        title: `Listen to ${song.name} by ${song.artist}`,
+        text: `Check out ${song.name} by ${song.artist} on Vinaraa!`,
+        url: window.location.href,
+      };
+      if (navigator.share) await navigator.share(shareData);
+      else console.log('Share not supported');
+    } catch (e) { console.error('Error sharing', e); }
+  };
+
+  const handleDownload = () => {
+    if (!song?.streamUrl) return;
+    const a = document.createElement('a');
+    a.href = song.streamUrl;
+    a.download = `${song.name} - ${song.artist}.mp3`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  const handleSaveToPlaylist = async () => {
+    if (!song) return;
+    try {
+      await playlists.saveSong({ songId: song.id });
+      // Visual feedback could be added here
+      console.log('Saved to playlist');
+    } catch (e) {
+      console.error('Failed to save to playlist', e);
+    }
+  };
+
   if (!song) {
     return (
       <div className="flex flex-col h-full bg-bg items-center justify-center">
@@ -347,9 +381,9 @@ export default function FullPlayer() {
           </button>
         </div>
         <div className="flex items-center justify-center gap-10 mt-2">
-          <button className="p-3 bg-surface-2 rounded-full border border-border" aria-label="Add to playlist"><Plus size={22} className="text-text" /></button>
-          <button className="p-3 bg-surface-2 rounded-full border border-border" aria-label="Download"><Download size={22} className="text-text" /></button>
-          <button className="p-3 bg-surface-2 rounded-full border border-border" aria-label="Share"><Share2 size={22} className="text-text" /></button>
+          <button onClick={handleSaveToPlaylist} className="p-3 bg-surface-2 rounded-full border border-border" aria-label="Add to playlist"><Plus size={22} className="text-text" /></button>
+          <button onClick={handleDownload} className="p-3 bg-surface-2 rounded-full border border-border" aria-label="Download"><Download size={22} className="text-text" /></button>
+          <button onClick={handleShare} className="p-3 bg-surface-2 rounded-full border border-border" aria-label="Share"><Share2 size={22} className="text-text" /></button>
         </div>
       </div>
       <div style={{ paddingBottom: 'env(safe-area-inset-bottom)' }} />

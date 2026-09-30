@@ -80,7 +80,7 @@ export const music = {
   trending: (language?: string) => apiClient<any>(`/music/trending${language ? `?language=${language}` : ''}`),
   languages: () => apiClient<any>('/music/languages'),
   streamUrl: (id: string, quality?: string, mode?: 'proxy' | 'redirect') => {
-    const qs = new URLSearchParams({ ...(quality && { quality }), mode: mode || 'proxy' }).toString();
+    const qs = new URLSearchParams({ ...(quality && { quality }), mode: mode || 'redirect' }).toString();
     return `${API_BASE}/music/stream/${id}?${qs}`;
   },
 };
