@@ -18,9 +18,9 @@ function useDebounce<T>(value: T, delay: number): T {
 
 type SearchTab = 'all' | 'songs' | 'albums' | 'artists' | 'playlists';
 
-function SongRow({ song, onPlay }: { song: any; onPlay: () => void }) {
+function SongRow({ song, onPlay, contextQueue }: { song: any; onPlay: (q: any[]) => void; contextQueue: any[] }) {
   return (
-    <button onClick={onPlay} className="flex items-center gap-3 px-4 py-3 w-full hover:bg-surface-2/50 transition-colors">
+    <button onClick={() => onPlay(contextQueue)} className="flex items-center gap-3 px-4 py-3 w-full hover:bg-surface-2/50 transition-colors">
       <div className="w-12 h-12 rounded-xl overflow-hidden flex-shrink-0 bg-surface-2">
         {getSongImage(song) && <img src={getSongImage(song)} alt={song.name} className="w-full h-full object-cover" />}
       </div>
@@ -78,11 +78,12 @@ export default function Search() {
     }
   }, [debouncedQuery, activeTab]);
 
-  const handlePlay = (song: any) => {
-    const playerSong = formatPlayerSong(song);
-    usePlayerStore.getState().setQueue([playerSong]);
+  const handlePlay = (song: any, contextQueue: any[]) => {
+    const queue = contextQueue.map(formatPlayerSong);
+    const startIndex = queue.findIndex(s => s.id === (song.id || song.saavnId));
+    usePlayerStore.getState().setQueue(queue, startIndex >= 0 ? startIndex : 0);
     usePlayerStore.getState().setShowPlayer(true);
-    navigate(`/player/${playerSong.id}`, { state: { song } });
+    navigate(`/player/${queue[startIndex >= 0 ? startIndex : 0].id}`, { state: { song } });
   };
 
   const tabs: SearchTab[] = ['all', 'songs', 'albums', 'artists', 'playlists'];
@@ -162,8 +163,8 @@ export default function Search() {
                 {(activeTab === 'all' || activeTab === 'songs') && (activeTab === 'all' ? results.songs : results)?.length > 0 && (
                   <div className="mb-4">
                     {activeTab === 'all' && <h3 className="text-text font-bold px-4 mb-2">Songs</h3>}
-                    {(activeTab === 'all' ? results.songs : results).slice(0, activeTab === 'all' ? 5 : 30).map((song: any) => (
-                      <SongRow key={song.id || song.saavnId} song={song} onPlay={() => handlePlay(song)} />
+                    {(activeTab === 'all' ? results.songs : results).slice(0, activeTab === 'all' ? 5 : 30).map((song: any, _: number, arr: any[]) => (
+                      <SongRow key={song.id || song.saavnId} song={song} contextQueue={arr} onPlay={(q) => handlePlay(song, q)} />
                     ))}
                   </div>
                 )}

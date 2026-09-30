@@ -79,13 +79,19 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setRepeat: (mode) => set({ repeat: mode }),
   setShuffle: (shuffle) => set({ shuffle }),
   nextTrack: () => {
-    const { queue, currentIndex, history, repeat } = get();
+    const { queue, currentIndex, history, repeat, shuffle } = get();
     const currentSong = queue[currentIndex];
     if (currentSong) {
       set({ history: [...history, currentSong] });
     }
     if (repeat === 'one') {
       set({ positionMs: 0 });
+      return;
+    }
+    if (shuffle && queue.length > 1) {
+      let nextIndex = Math.floor(Math.random() * queue.length);
+      while (nextIndex === currentIndex) nextIndex = Math.floor(Math.random() * queue.length);
+      set({ currentIndex: nextIndex, positionMs: 0 });
       return;
     }
     if (currentIndex < queue.length - 1) {

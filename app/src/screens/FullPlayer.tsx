@@ -5,9 +5,10 @@ import { usePlayerStore } from '@/store/player';
 import { tracking } from '@/api/endpoints';
 import {
   ChevronDown, Heart, MoreHorizontal, SkipBack, SkipForward,
-  Play, Pause, Shuffle, Repeat, Repeat1, Share2, ListMusic, Download
+  Play, Pause, Shuffle, Repeat, Repeat1, Share2, Download, Plus
 } from 'lucide-react';
 import { springs } from '@/motion';
+import { playlists } from '@/api/endpoints';
 
 type PlayerTab = 'photo' | 'lyrics' | 'info';
 
@@ -37,6 +38,7 @@ export default function FullPlayer() {
   useEffect(() => {
     if (!song?.id) return;
     tracking.startSession(song.id).then((s) => setSessionId(s.sessionId)).catch(() => {});
+    playlists.isLiked(song.id).then((res) => setLiked(res.liked)).catch(() => {});
     return () => {
       if (sessionId) tracking.endSession(sessionId, Math.round(positionRef.current)).catch(() => {});
     };
@@ -81,6 +83,15 @@ export default function FullPlayer() {
     }
   }, [playerTab, song?.id]);
 
+  useEffect(() => {
+    if (playerTab === 'lyrics' && lyrics?.type === 'synced') {
+      const activeEl = document.getElementById('active-lyric');
+      if (activeEl) {
+        activeEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  }, [positionMs, playerTab, lyrics]);
+
 
   const progress = durationMs ? (seeking ? seekValue : positionMs / durationMs) : 0;
 
@@ -99,6 +110,20 @@ export default function FullPlayer() {
     if (repeat === 'off') setRepeat('all');
     else if (repeat === 'all') setRepeat('one');
     else setRepeat('off');
+  };
+
+  const handleLike = () => {
+    if (!song?.id) return;
+    const newLiked = !liked;
+    setLiked(newLiked);
+    playlists.like(song.id, newLiked).catch(() => setLiked(!newLiked));
+  };
+
+  const TABS: PlayerTab[] = ['photo', 'lyrics', 'info'];
+  const handleSwipeTabs = (_: any, info: any) => {
+    const idx = TABS.indexOf(playerTab);
+    if (info.offset.x < -40 && idx < TABS.length - 1) setPlayerTab(TABS[idx + 1]);
+    if (info.offset.x > 40 && idx > 0) setPlayerTab(TABS[idx - 1]);
   };
 
   if (!song) {
@@ -127,6 +152,14 @@ export default function FullPlayer() {
         </button>
       </div>
 
+      <motion.div 
+        drag="y" dragConstraints={{ top: 0, bottom: 0 }} dragElastic={0.4}
+        onDragEnd={(_, info) => { if (info.offset.y > 100) { setShowPlayer(false); navigate(-1); } }}
+        className="w-full flex justify-center py-2 -mt-4 mb-2 z-10 relative"
+      >
+        <div className="w-12 h-1.5 bg-border rounded-full opacity-50" />
+      </motion.div>
+
       <div className="flex mx-5 bg-surface-2 rounded-pill p-1 mb-4">
         {(['photo', 'lyrics', 'info'] as PlayerTab[]).map((tab) => (
           <button key={tab} onClick={() => setPlayerTab(tab)}
@@ -136,7 +169,11 @@ export default function FullPlayer() {
         ))}
       </div>
 
-      <div className="flex-1 px-5 min-h-0">
+      <motion.div 
+        className="flex-1 px-5 min-h-0"
+        drag="x" dragConstraints={{ left: 0, right: 0 }} dragElastic={0.2}
+        onDragEnd={handleSwipeTabs}
+      >
         <AnimatePresence mode="wait">
           {playerTab === 'photo' && (
             <motion.div key="photo" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -165,7 +202,7 @@ export default function FullPlayer() {
                     {lyrics.lines.map((l: any, i: number) => {
                       const isActive = (positionMs / 1000) >= l.t && (i === lyrics.lines.length - 1 || (positionMs / 1000) < lyrics.lines[i + 1].t);
                       return (
-                        <p key={i} className={`text-lg font-bold transition-all duration-300 ${isActive ? 'text-primary-soft scale-110' : 'text-text/40'}`}>
+                        <p key={i} id={isActive ? 'active-lyric' : undefined} className={`text-lg font-bold transition-all duration-300 ${isActive ? 'text-primary-soft scale-110' : 'text-text/40'}`}>
                           {l.x}
                         </p>
                       );
@@ -240,7 +277,7 @@ export default function FullPlayer() {
             </motion.div>
           )}
         </AnimatePresence>
-      </div>
+      </motion.div>
 
       <div className="px-5 py-4 flex items-center justify-between">
         <div className="min-w-0">
@@ -248,7 +285,7 @@ export default function FullPlayer() {
           <p className="text-muted text-sm line-clamp-1">{song.artist}</p>
         </div>
         <motion.button
-          onClick={() => setLiked((v) => !v)}
+          onClick={handleLike}
           whileTap={{ scale: 1.35 }}
           transition={{ type: 'spring' as const, stiffness: 500, damping: 15 }}
           className="p-2 ml-4 flex-shrink-0"
@@ -309,11 +346,10 @@ export default function FullPlayer() {
             {repeat === 'one' ? <Repeat1 size={22} className="text-primary-soft" /> : <Repeat size={22} className={repeat === 'all' ? 'text-primary-soft' : 'text-muted'} />}
           </button>
         </div>
-        <div className="flex items-center justify-between">
-          <button className="p-2" aria-label="Add to playlist"><ListMusic size={22} className="text-muted" /></button>
-          <button className="p-2" aria-label="Download"><Download size={22} className="text-muted" /></button>
-          <button className="p-2" aria-label="Share"><Share2 size={22} className="text-muted" /></button>
-          <button className="p-2" aria-label="Queue"><ListMusic size={22} className="text-muted" /></button>
+        <div className="flex items-center justify-center gap-10 mt-2">
+          <button className="p-3 bg-surface-2 rounded-full border border-border" aria-label="Add to playlist"><Plus size={22} className="text-text" /></button>
+          <button className="p-3 bg-surface-2 rounded-full border border-border" aria-label="Download"><Download size={22} className="text-text" /></button>
+          <button className="p-3 bg-surface-2 rounded-full border border-border" aria-label="Share"><Share2 size={22} className="text-text" /></button>
         </div>
       </div>
       <div style={{ paddingBottom: 'env(safe-area-inset-bottom)' }} />

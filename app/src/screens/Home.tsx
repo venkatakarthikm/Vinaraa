@@ -29,11 +29,11 @@ function getGreeting() {
   return 'Good Evening';
 }
 
-function SongCard({ song, onPlay, index }: { song: any; onPlay: (s: any) => void; index: number }) {
+function SongCard({ song, onPlay, index, contextQueue }: { song: any; onPlay: (s: any, q: any[]) => void; index: number, contextQueue: any[] }) {
   return (
     <motion.button
       custom={index} variants={listStaggerVariants} initial="initial" animate="animate"
-      whileTap={{ scale: 0.97 }} onClick={() => onPlay(song)} className="flex-shrink-0 w-36"
+      whileTap={{ scale: 0.97 }} onClick={() => onPlay(song, contextQueue)} className="flex-shrink-0 w-36"
     >
       <div className="relative w-36 h-36 rounded-2xl overflow-hidden mb-2">
         {getSongImage(song) ? <img src={getSongImage(song)} alt={song.name} className="w-full h-full object-cover" />
@@ -56,11 +56,11 @@ function SongCard({ song, onPlay, index }: { song: any; onPlay: (s: any) => void
   );
 }
 
-function SongRow({ song, index, onPlay }: { song: any; index: number; onPlay: (s: any) => void }) {
+function SongRow({ song, index, onPlay, contextQueue }: { song: any; index: number; onPlay: (s: any, q: any[]) => void, contextQueue: any[] }) {
   return (
     <motion.button
       custom={index} variants={listStaggerVariants} initial="initial" animate="animate"
-      whileTap={{ scale: 0.98 }} onClick={() => onPlay(song)} className="flex items-center gap-3 px-4 py-3 w-full"
+      whileTap={{ scale: 0.98 }} onClick={() => onPlay(song, contextQueue)} className="flex items-center gap-3 px-4 py-3 w-full"
     >
       <div className="w-12 h-12 rounded-xl overflow-hidden flex-shrink-0 bg-surface-2">
         {getSongImage(song) && <img src={getSongImage(song)} alt={song.name} className="w-full h-full object-cover" />}
@@ -105,11 +105,12 @@ export default function Home() {
 
   useEffect(() => { loadData(); }, []);
 
-  const handlePlay = (song: any) => {
-    const playerSong = formatPlayerSong(song);
-    usePlayerStore.getState().setQueue([playerSong]);
+  const handlePlay = (song: any, contextQueue: any[]) => {
+    const queue = contextQueue.map(formatPlayerSong);
+    const startIndex = queue.findIndex(s => s.id === (song.id || song.saavnId));
+    usePlayerStore.getState().setQueue(queue, startIndex >= 0 ? startIndex : 0);
     usePlayerStore.getState().setShowPlayer(true);
-    navigate(`/player/${playerSong.id}`, { state: { song } });
+    navigate(`/player/${queue[startIndex >= 0 ? startIndex : 0].id}`, { state: { song } });
   };
 
   return (
@@ -148,8 +149,8 @@ export default function Home() {
             </div>
           ) : (
             <div className="flex gap-4 px-5 overflow-x-auto scroll-x pb-2">
-              {trending.filter((v, i, a) => a.findIndex(t => (t.id || t.saavnId || t._id) === (v.id || v.saavnId || v._id) || uniqName(t) === uniqName(v)) === i).slice(0, 10).map((song, i) => (
-                <SongCard key={song.id || song.saavnId} song={song} onPlay={handlePlay} index={i} />
+              {trending.filter((v, i, a) => a.findIndex(t => (t.id || t.saavnId || t._id) === (v.id || v.saavnId || v._id) || uniqName(t) === uniqName(v)) === i).slice(0, 10).map((song, i, arr) => (
+                <SongCard key={song.id || song.saavnId} song={song} onPlay={handlePlay} index={i} contextQueue={arr} />
               ))}
             </div>
           )}
@@ -164,8 +165,8 @@ export default function Home() {
           feed.map((rail) => (
             <div key={rail.id} className="mt-6">
               <h2 className="text-text font-bold px-5 mb-3">{rail.title}</h2>
-              {rail.items.filter((v: any, i: number, a: any[]) => a.findIndex(t => (t.id || t.saavnId || t._id) === (v.id || v.saavnId || v._id) || uniqName(t) === uniqName(v)) === i).slice(0, 8).map((song: any, i: number) => (
-                <SongRow key={song.id || song.saavnId} song={song} index={i} onPlay={handlePlay} />
+              {rail.items.filter((v: any, i: number, a: any[]) => a.findIndex(t => (t.id || t.saavnId || t._id) === (v.id || v.saavnId || v._id) || uniqName(t) === uniqName(v)) === i).slice(0, 8).map((song: any, i: number, arr: any[]) => (
+                <SongRow key={song.id || song.saavnId} song={song} index={i} onPlay={handlePlay} contextQueue={arr} />
               ))}
             </div>
           ))
@@ -174,8 +175,8 @@ export default function Home() {
         {!loading && feed.length === 0 && trending.length > 0 && (
           <div className="mt-6">
             <h2 className="text-text font-bold px-5 mb-3">Top Songs</h2>
-            {trending.filter((v, i, a) => a.findIndex(t => (t.id || t.saavnId || t._id) === (v.id || v.saavnId || v._id) || uniqName(t) === uniqName(v)) === i).slice(0, 20).map((song, i) => (
-              <SongRow key={song.id || song.saavnId} song={song} index={i} onPlay={handlePlay} />
+            {trending.filter((v, i, a) => a.findIndex(t => (t.id || t.saavnId || t._id) === (v.id || v.saavnId || v._id) || uniqName(t) === uniqName(v)) === i).slice(0, 20).map((song, i, arr) => (
+              <SongRow key={song.id || song.saavnId} song={song} index={i} onPlay={handlePlay} contextQueue={arr} />
             ))}
           </div>
         )}
