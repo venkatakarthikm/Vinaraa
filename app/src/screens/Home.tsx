@@ -15,6 +15,14 @@ interface FeedRail {
   items: any[];
 }
 
+function getArtistsText(song: any) {
+  if (song.artistsText) return song.artistsText;
+  const list = song.singers || song.primaryArtists || song.artists;
+  if (typeof list === 'string') return list;
+  if (Array.isArray(list)) return list.map((a: any) => typeof a === 'string' ? a : a.name).filter(Boolean).join(', ');
+  return 'Unknown Artist';
+}
+
 function getGreeting() {
   const h = new Date().getHours();
   if (h < 12) return 'Good Morning';
@@ -38,7 +46,7 @@ function SongCard({ song, onPlay, index }: { song: any; onPlay: (s: any) => void
       </div>
       <p className="text-text text-xs font-semibold line-clamp-1">{song.name}</p>
       <p className="text-muted text-[11px] line-clamp-1">
-        {(song.singers || song.artists || []).map((a: any) => a.name).join(', ')}
+        {getArtistsText(song)}
       </p>
       {song.matchPercent && (
         <span className="inline-block mt-1 bg-mint/20 text-mint text-[10px] font-bold px-2 py-0.5 rounded-pill">
@@ -61,7 +69,7 @@ function SongRow({ song, index, onPlay }: { song: any; index: number; onPlay: (s
       <div className="flex-1 min-w-0 text-left">
         <p className="text-text text-sm font-semibold line-clamp-1">{song.name}</p>
         <p className="text-muted text-xs line-clamp-1">
-          {(song.singers || song.artists || []).map((a: any) => a.name).join(', ')}
+          {getArtistsText(song)}
         </p>
       </div>
       {song.durationMs && (
@@ -99,7 +107,16 @@ export default function Home() {
   useEffect(() => { loadData(); }, []);
 
   const handlePlay = (song: any) => {
-    navigate(`/player/${song.id || song.saavnId || song._id}`, { state: { song } });
+    const playerSong = {
+      id: song.id || song.saavnId || song._id,
+      name: song.name,
+      artist: getArtistsText(song),
+      image: song.image,
+      durationMs: song.durationMs,
+    };
+    usePlayerStore.getState().setQueue([playerSong]);
+    usePlayerStore.getState().setShowPlayer(true);
+    navigate(`/player/${playerSong.id}`, { state: { song } });
   };
 
   return (
@@ -138,7 +155,7 @@ export default function Home() {
             </div>
           ) : (
             <div className="flex gap-4 px-5 overflow-x-auto scroll-x pb-2">
-              {trending.slice(0, 10).map((song, i) => (
+              {trending.filter((v, i, a) => a.findIndex(t => (t.id || t.saavnId || t._id) === (v.id || v.saavnId || v._id)) === i).slice(0, 10).map((song, i) => (
                 <SongCard key={song.id || song.saavnId} song={song} onPlay={handlePlay} index={i} />
               ))}
             </div>
@@ -154,7 +171,7 @@ export default function Home() {
           feed.map((rail) => (
             <div key={rail.id} className="mt-6">
               <h2 className="text-text font-bold px-5 mb-3">{rail.title}</h2>
-              {rail.items.slice(0, 8).map((song, i) => (
+              {rail.items.filter((v: any, i: number, a: any[]) => a.findIndex(t => (t.id || t.saavnId || t._id) === (v.id || v.saavnId || v._id)) === i).slice(0, 8).map((song: any, i: number) => (
                 <SongRow key={song.id || song.saavnId} song={song} index={i} onPlay={handlePlay} />
               ))}
             </div>
@@ -164,7 +181,7 @@ export default function Home() {
         {!loading && feed.length === 0 && trending.length > 0 && (
           <div className="mt-6">
             <h2 className="text-text font-bold px-5 mb-3">Top Songs</h2>
-            {trending.slice(0, 20).map((song, i) => (
+            {trending.filter((v, i, a) => a.findIndex(t => (t.id || t.saavnId || t._id) === (v.id || v.saavnId || v._id)) === i).slice(0, 20).map((song, i) => (
               <SongRow key={song.id || song.saavnId} song={song} index={i} onPlay={handlePlay} />
             ))}
           </div>

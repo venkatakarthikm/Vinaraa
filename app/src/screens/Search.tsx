@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { music, users } from '@/api/endpoints';
 import { Search as SearchIcon, X, Clock, ArrowUpLeft } from 'lucide-react';
 import MiniPlayer from '@/components/MiniPlayer';
+import { usePlayerStore } from '@/store/player';
 
 function useDebounce<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState<T>(value);
@@ -15,6 +16,14 @@ function useDebounce<T>(value: T, delay: number): T {
 
 type SearchTab = 'all' | 'songs' | 'albums' | 'artists' | 'playlists';
 
+function getArtistsText(song: any) {
+  if (song.artistsText) return song.artistsText;
+  const list = song.singers || song.primaryArtists || song.artists;
+  if (typeof list === 'string') return list;
+  if (Array.isArray(list)) return list.map((a: any) => typeof a === 'string' ? a : a.name).filter(Boolean).join(', ');
+  return 'Unknown Artist';
+}
+
 function SongRow({ song, onPlay }: { song: any; onPlay: () => void }) {
   return (
     <button onClick={onPlay} className="flex items-center gap-3 px-4 py-3 w-full hover:bg-surface-2/50 transition-colors">
@@ -24,7 +33,7 @@ function SongRow({ song, onPlay }: { song: any; onPlay: () => void }) {
       <div className="flex-1 min-w-0 text-left">
         <p className="text-text text-sm font-semibold line-clamp-1">{song.name}</p>
         <p className="text-muted text-xs line-clamp-1">
-          {(song.singers || song.artists || []).map((a: any) => a.name).join(', ')}
+          {getArtistsText(song)}
         </p>
       </div>
       {song.durationMs && (
@@ -76,7 +85,16 @@ export default function Search() {
   }, [debouncedQuery, activeTab]);
 
   const handlePlay = (song: any) => {
-    navigate(`/player/${song.id || song.saavnId}`, { state: { song } });
+    const playerSong = {
+      id: song.id || song.saavnId || song._id,
+      name: song.name,
+      artist: getArtistsText(song),
+      image: song.image,
+      durationMs: song.durationMs,
+    };
+    usePlayerStore.getState().setQueue([playerSong]);
+    usePlayerStore.getState().setShowPlayer(true);
+    navigate(`/player/${playerSong.id}`, { state: { song } });
   };
 
   const tabs: SearchTab[] = ['all', 'songs', 'albums', 'artists', 'playlists'];
@@ -153,26 +171,26 @@ export default function Search() {
             )}
             {!loading && (
               <>
-                {(activeTab === 'all' || activeTab === 'songs') && results.songs?.length > 0 && (
+                {(activeTab === 'all' || activeTab === 'songs') && (activeTab === 'all' ? results.songs : results)?.length > 0 && (
                   <div className="mb-4">
                     {activeTab === 'all' && <h3 className="text-text font-bold px-4 mb-2">Songs</h3>}
-                    {results.songs.slice(0, activeTab === 'all' ? 5 : 30).map((song: any) => (
+                    {(activeTab === 'all' ? results.songs : results).slice(0, activeTab === 'all' ? 5 : 30).map((song: any) => (
                       <SongRow key={song.id || song.saavnId} song={song} onPlay={() => handlePlay(song)} />
                     ))}
                   </div>
                 )}
-                {(activeTab === 'all' || activeTab === 'albums') && results.albums?.length > 0 && (
+                {(activeTab === 'all' || activeTab === 'albums') && (activeTab === 'all' ? results.albums : results)?.length > 0 && (
                   <div className="mb-4">
                     {activeTab === 'all' && <h3 className="text-text font-bold px-4 mb-2">Albums</h3>}
-                    {results.albums.slice(0, activeTab === 'all' ? 4 : 30).map((item: any) => (
+                    {(activeTab === 'all' ? results.albums : results).slice(0, activeTab === 'all' ? 4 : 30).map((item: any) => (
                       <AlbumCard key={item.id} item={item} onClick={() => navigate(`/album/${item.id}`)} />
                     ))}
                   </div>
                 )}
-                {(activeTab === 'all' || activeTab === 'artists') && results.artists?.length > 0 && (
+                {(activeTab === 'all' || activeTab === 'artists') && (activeTab === 'all' ? results.artists : results)?.length > 0 && (
                   <div className="mb-4">
                     {activeTab === 'all' && <h3 className="text-text font-bold px-4 mb-2">Artists</h3>}
-                    {results.artists.slice(0, activeTab === 'all' ? 4 : 30).map((item: any) => (
+                    {(activeTab === 'all' ? results.artists : results).slice(0, activeTab === 'all' ? 4 : 30).map((item: any) => (
                       <button key={item.id} onClick={() => navigate(`/artist/${item.id}`)}
                         className="flex items-center gap-3 px-4 py-3 w-full">
                         <div className="w-12 h-12 rounded-full overflow-hidden flex-shrink-0 bg-surface-2">
@@ -186,7 +204,10 @@ export default function Search() {
                     ))}
                   </div>
                 )}
-                {!results.songs?.length && !results.albums?.length && !results.artists?.length && (
+                {activeTab === 'all' && !results.songs?.length && !results.albums?.length && !results.artists?.length && (
+                  <div className="text-center py-12 px-4"><p className="text-muted">No results for "{query}"</p></div>
+                )}
+                {activeTab !== 'all' && results.length === 0 && (
                   <div className="text-center py-12 px-4"><p className="text-muted">No results for "{query}"</p></div>
                 )}
               </>
