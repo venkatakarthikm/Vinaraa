@@ -6,13 +6,13 @@ export const auth = {
     name: string;
     email: string;
     password: string;
-    device: { id: string; name: string; platform: string };
+    device: { deviceId: string; platform: string; model?: string; appVersion?: string };
   }) => apiClient<any>('/auth/register', { method: 'POST', body: JSON.stringify(body) }),
 
   login: (body: {
     email: string;
     password: string;
-    device: { id: string; name: string; platform: string };
+    device: { deviceId: string; platform: string; model?: string; appVersion?: string };
   }) => apiClient<any>('/auth/login', { method: 'POST', body: JSON.stringify(body) }),
 
   logout: (refreshToken: string) =>
@@ -89,13 +89,13 @@ export const music = {
 // ── Playlists ──────────────────────────────────────────────────────────────
 export const playlists = {
   list: () => apiClient<any>('/playlists'),
-  create: (body: { name?: string; isPublic?: boolean }) => apiClient<any>('/playlists', { method: 'POST', body: JSON.stringify(body) }),
+  create: (body: { name?: string; visibility?: 'private' | 'unlisted' | 'public' }) => apiClient<any>('/playlists', { method: 'POST', body: JSON.stringify(body) }),
   get: (id: string) => apiClient<any>(`/playlists/${id}`),
   update: (id: string, body: any) => apiClient<any>(`/playlists/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   delete: (id: string) => apiClient<any>(`/playlists/${id}`, { method: 'DELETE' }),
-  addTrack: (id: string, body: { songId: string }) => apiClient<any>(`/playlists/${id}/tracks`, { method: 'POST', body: JSON.stringify(body) }),
-  removeTrack: (id: string, body: { songId: string }) => apiClient<any>(`/playlists/${id}/tracks`, { method: 'DELETE', body: JSON.stringify(body) }),
-  reorder: (id: string, body: { songIds: string[] }) => apiClient<any>(`/playlists/${id}/reorder`, { method: 'PATCH', body: JSON.stringify(body) }),
+  addTrack: (id: string, body: { songIds: string[]; source?: string; position?: number }) => apiClient<any>(`/playlists/${id}/tracks`, { method: 'POST', body: JSON.stringify(body) }),
+  removeTrack: (id: string, body: { songIds: string[] }) => apiClient<any>(`/playlists/${id}/tracks`, { method: 'DELETE', body: JSON.stringify(body) }),
+  reorder: (id: string, body: { from: number; to: number }) => apiClient<any>(`/playlists/${id}/reorder`, { method: 'PATCH', body: JSON.stringify(body) }),
   saveSong: (body: { songId: string; playlistIds?: string[]; newPlaylistName?: string }) =>
     apiClient<any>('/playlists/save-song', { method: 'POST', body: JSON.stringify(body) }),
   nameSuggestion: () => apiClient<any>('/playlists/name-suggestion'),

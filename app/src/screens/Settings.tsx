@@ -20,7 +20,7 @@ export default function Settings() {
 
   const savePrefs = async () => {
     try {
-      await users.updatePreferences({ audioQuality: quality, autoplay, crossfade, dataSaver });
+      await users.updatePreferences({ audioQuality: quality, autoplay, crossfadeSeconds: crossfade ? 3 : 0, dataSaver });
     } catch (_e) {}
   };
 

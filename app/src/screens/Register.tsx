@@ -4,6 +4,7 @@ import { pageTransitionVariants } from '@/motion';
 import { auth } from '@/api/endpoints';
 import { useAuthStore } from '@/store/auth';
 import { useNavigate } from 'react-router-dom';
+import { getDeviceInfo } from '@/utils/device';
 import { Mail, Lock, Eye, EyeOff, User, ChevronLeft } from 'lucide-react';
 
 function getPasswordStrength(password: string) {
@@ -36,12 +37,12 @@ export default function Register() {
     setLoading(true);
     setError('');
     try {
-      const deviceId = `web-${Math.random().toString(36).slice(2)}`;
+      const deviceInfo = await getDeviceInfo();
       const res = await auth.register({
         name,
         email,
         password,
-        device: { id: deviceId, name: 'Android Phone', platform: 'android' },
+        device: deviceInfo,
       });
       await login(res.user, { accessToken: res.accessToken, refreshToken: res.refreshToken });
       // Check onboarding

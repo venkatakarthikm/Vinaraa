@@ -4,6 +4,7 @@ import { pageTransitionVariants } from '@/motion';
 import { auth } from '@/api/endpoints';
 import { useAuthStore } from '@/store/auth';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { getDeviceInfo } from '@/utils/device';
 import { Mail, Lock, Eye, EyeOff, ChevronLeft } from 'lucide-react';
 
 export default function Login() {
@@ -22,12 +23,11 @@ export default function Login() {
     setLoading(true);
     setError('');
     try {
-      const deviceId = localStorage.getItem('deviceId') || `android-${Math.random().toString(36).slice(2)}`;
-      localStorage.setItem('deviceId', deviceId);
+      const deviceInfo = await getDeviceInfo();
       const res = await auth.login({
         email,
         password,
-        device: { id: deviceId, name: 'Android Phone', platform: 'android' },
+        device: deviceInfo,
       });
       await login(res.user, { accessToken: res.accessToken, refreshToken: res.refreshToken });
       if (!res.user?.onboarding?.completed) {

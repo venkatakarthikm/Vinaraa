@@ -36,7 +36,7 @@ export default function PlaylistPage() {
 
   const removeSong = async (songId: string) => {
     if (!id) return;
-    await playlists.removeTrack(id, { songId });
+    await playlists.removeTrack(id, { songIds: [songId] });
     setPlaylist((pl: any) => ({ ...pl, songs: pl.songs.filter((s: any) => (s.id || s.saavnId) !== songId) }));
   };
 

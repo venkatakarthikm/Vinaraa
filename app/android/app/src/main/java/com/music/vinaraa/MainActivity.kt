@@ -1,4 +1,4 @@
-package com.vinaraa.app
+package com.music.vinaraa
 
 import android.os.Bundle
 import com.getcapacitor.BridgeActivity
