@@ -64,4 +64,14 @@ export class VinaraaPlayerWebStub extends WebPlugin implements VinaraaPlayerPlug
   async setVolume({ volume }: { volume: number }): Promise<void> {
     if (this.audio) this.audio.volume = Math.max(0, Math.min(1, volume));
   }
+
+  async download({ url, title, fileName }: { url: string; title?: string; fileName?: string }): Promise<{ downloadId: number }> {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName || title || 'download.mp3';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    return { downloadId: 1 };
+  }
 }

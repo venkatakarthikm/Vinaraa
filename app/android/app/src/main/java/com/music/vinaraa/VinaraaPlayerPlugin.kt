@@ -9,12 +9,18 @@ import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
-import com.getcapacitor.annotation.CapacitorPlugin
+import androidx.media3.session.MediaController
+import androidx.media3.session.SessionToken
+import android.content.ComponentName
+import androidx.core.content.ContextCompat
+import com.google.common.util.concurrent.ListenableFuture
+import androidx.media3.common.MediaMetadata
 
 @CapacitorPlugin(name = "VinaraaPlayer")
 class VinaraaPlayerPlugin : Plugin() {
 
-    private var player: ExoPlayer? = null
+    private var player: Player? = null
+    private var controllerFuture: ListenableFuture<MediaController>? = null
     private var prefs: SharedPreferences? = null
     private val PREFS_NAME = "vinaraa_auth"
 
@@ -24,27 +30,32 @@ class VinaraaPlayerPlugin : Plugin() {
     }
 
     private fun initPlayer() {
-        player = ExoPlayer.Builder(context).build().also { exo ->
-            exo.addListener(object : Player.Listener {
-                override fun onIsPlayingChanged(isPlaying: Boolean) {
-                    activity?.runOnUiThread {
-                        val event = JSObject().apply {
-                            put("isPlaying", isPlaying)
-                        }
-                        notifyListeners("playbackStateChanged", event)
-                    }
-                }
-
-                override fun onPlaybackStateChanged(playbackState: Int) {
-                    if (playbackState == Player.STATE_ENDED) {
+        val sessionToken = SessionToken(context, ComponentName(context, PlaybackService::class.java))
+        controllerFuture = MediaController.Builder(context, sessionToken).buildAsync()
+        controllerFuture?.addListener(
+            Runnable {
+                val controller = controllerFuture?.get()
+                player = controller
+                controller?.addListener(object : Player.Listener {
+                    override fun onIsPlayingChanged(isPlaying: Boolean) {
                         activity?.runOnUiThread {
-                            val event = JSObject().apply { put("type", "ended") }
+                            val event = JSObject().apply { put("isPlaying", isPlaying) }
                             notifyListeners("playbackStateChanged", event)
                         }
                     }
-                }
-            })
-        }
+
+                    override fun onPlaybackStateChanged(playbackState: Int) {
+                        if (playbackState == Player.STATE_ENDED) {
+                            activity?.runOnUiThread {
+                                val event = JSObject().apply { put("type", "ended") }
+                                notifyListeners("playbackStateChanged", event)
+                            }
+                        }
+                    }
+                })
+            },
+            ContextCompat.getMainExecutor(context)
+        )
     }
 
     @PluginMethod
@@ -73,8 +84,22 @@ class VinaraaPlayerPlugin : Plugin() {
             return
         }
 
+        val title = call.getString("title")
+        val artist = call.getString("artist")
+        val artwork = call.getString("artwork")
+
         activity.runOnUiThread {
-            val mediaItem = MediaItem.fromUri(streamUrl)
+            val metadata = MediaMetadata.Builder()
+                .setTitle(title)
+                .setArtist(artist)
+                .setArtworkUri(if (artwork != null) android.net.Uri.parse(artwork) else null)
+                .build()
+
+            val mediaItem = MediaItem.Builder()
+                .setUri(streamUrl)
+                .setMediaMetadata(metadata)
+                .build()
+                
             player?.run {
                 setMediaItem(mediaItem)
                 prepare()
@@ -147,8 +172,34 @@ class VinaraaPlayerPlugin : Plugin() {
         call.resolve()
     }
 
+    @PluginMethod
+    fun download(call: PluginCall) {
+        val url = call.getString("url") ?: return call.reject("url is required")
+        val title = call.getString("title") ?: "Download"
+        val fileName = call.getString("fileName") ?: "download.mp3"
+
+        try {
+            val request = android.app.DownloadManager.Request(android.net.Uri.parse(url))
+                .setTitle(title)
+                .setDescription("Downloading...")
+                .setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_MUSIC, fileName)
+                .setAllowedOverMetered(true)
+                .setAllowedOverRoaming(true)
+
+            val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as android.app.DownloadManager
+            val downloadId = downloadManager.enqueue(request)
+
+            val ret = JSObject()
+            ret.put("downloadId", downloadId)
+            call.resolve(ret)
+        } catch (e: Exception) {
+            call.reject("Download failed", e)
+        }
+    }
+
     override fun handleOnDestroy() {
-        player?.release()
+        controllerFuture?.let { MediaController.releaseFuture(it) }
         player = null
         super.handleOnDestroy()
     }

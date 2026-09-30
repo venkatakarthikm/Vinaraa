@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { springs } from '@/motion';
 import { playlists } from '@/api/endpoints';
+import { VinaraaPlayer } from '@/native/player';
 
 type PlayerTab = 'photo' | 'lyrics' | 'info';
 
@@ -139,14 +140,18 @@ export default function FullPlayer() {
     } catch (e) { console.error('Error sharing', e); }
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!song?.streamUrl) return;
-    const a = document.createElement('a');
-    a.href = song.streamUrl;
-    a.download = `${song.name} - ${song.artist}.mp3`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    try {
+      await VinaraaPlayer.download({
+        url: song.streamUrl,
+        title: song.name,
+        fileName: `${song.name} - ${song.artist}.mp3`
+      });
+      console.log('Download started');
+    } catch (e) {
+      console.error('Download failed', e);
+    }
   };
 
   const handleSaveToPlaylist = async () => {

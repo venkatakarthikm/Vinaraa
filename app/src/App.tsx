@@ -6,6 +6,30 @@ import { ToastContainer } from '@/components/Toast';
 import Navigator from '@/navigation/Navigator';
 import { useNavigate as _useNavigate, useLocation } from 'react-router-dom';
 import { startPlayerEngine } from '@/player/engine';
+import OneSignal from 'onesignal-cordova-plugin';
+import { notifications } from '@/api/endpoints';
+
+export function setupOneSignal() {
+  if (typeof window !== 'undefined' && (window as any).cordova) {
+    OneSignal.initialize("c7594dd5-a376-4104-ac20-56abe4f1bf42");
+    OneSignal.Notifications.requestPermission(true).then((success: boolean) => {
+      console.log("Notification permission granted " + success);
+    });
+
+    const registerToken = (token: string) => {
+      if (token) {
+        notifications.registerDevice({ deviceId: token, platform: 'android', provider: 'onesignal' }).catch(console.error);
+      }
+    };
+
+    OneSignal.User.pushSubscription.addEventListener("change", (event: any) => {
+      if (event.current.optedIn) registerToken(event.current.id);
+    });
+
+    const token = OneSignal.User.pushSubscription.id;
+    if (token) registerToken(token);
+  }
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -35,6 +59,7 @@ function AppWrapper() {
 
   useEffect(() => {
     startPlayerEngine();
+    setupOneSignal();
     
     const listener = CapacitorApp.addListener('backButton', (_: any) => {
       const path = location.pathname;
