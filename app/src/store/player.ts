@@ -85,7 +85,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       set({ history: [...history, currentSong] });
     }
     if (repeat === 'one') {
-      set({ positionMs: 0 });
+      get().seekTo(0);
       return;
     }
     if (shuffle && queue.length > 1) {
@@ -96,14 +96,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
     if (currentIndex < queue.length - 1) {
       set({ currentIndex: currentIndex + 1, positionMs: 0 });
-    } else if (repeat === 'all') {
-      set({ currentIndex: 0, positionMs: 0 });
+    } else {
+      // Loop back to start if at the end of queue, but only play if repeat is 'all'
+      set({ currentIndex: 0, positionMs: 0, isPlaying: repeat === 'all' });
     }
   },
   previousTrack: () => {
     const { positionMs, currentIndex, history } = get();
     if (positionMs > 3000) {
-      set({ positionMs: 0 });
+      get().seekTo(0);
       return;
     }
     if (history.length > 0) {

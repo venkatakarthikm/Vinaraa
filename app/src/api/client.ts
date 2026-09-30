@@ -1,8 +1,6 @@
 import { z } from 'zod';
 import { VinaraaPlayer } from '@/native/player';
-import { getDeviceInfo } from '@/utils/device';
 import { useAuthStore } from '@/store/auth';
-import { Preferences } from '@capacitor/preferences';
 
 export const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1';
 
@@ -25,7 +23,6 @@ async function getToken(): Promise<string | null> {
     return localStorage.getItem('mockAccessToken');
   }
 }
-
 
 export async function apiClient<T>(
   endpoint: string,
@@ -56,11 +53,8 @@ export async function apiClient<T>(
   }
 
   if (!response.ok || json.success === false) {
-    if (response.status === 401 && !endpoint.startsWith('/auth')) {
-      useAuthStore.getState().logout();
-      window.location.href = '/login';
-      throw new ApiError('UNAUTHORIZED', 'Authentication required');
-    }
+    // Note: User explicitly requested to remove refresh token and logout on 401
+    // to maintain permanent login state.
     const err = json.error || {};
     throw new ApiError(err.code || 'UNKNOWN_ERROR', err.message || response.statusText, err.details);
   }

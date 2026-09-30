@@ -68,14 +68,18 @@ export default function Search() {
   }, []);
 
   useEffect(() => {
+    let active = true;
     if (debouncedQuery.length < 2) { setSuggestions([]); setResults(null); return; }
     if (debouncedQuery.length >= 2) {
-      music.suggestions(debouncedQuery).then((d) => setSuggestions(d?.suggestions || [])).catch(() => {});
+      music.suggestions(debouncedQuery).then((d) => { if (active) setSuggestions(d?.suggestions || []); }).catch(() => {});
     }
     if (debouncedQuery.length >= 3) {
       setLoading(true);
-      music.search({ q: debouncedQuery, type: activeTab }).then((d) => { setResults(d); setLoading(false); }).catch(() => setLoading(false));
+      music.search({ q: debouncedQuery, type: activeTab }).then((d) => {
+        if (active) { setResults(d); setLoading(false); }
+      }).catch(() => { if (active) setLoading(false); });
     }
+    return () => { active = false; };
   }, [debouncedQuery, activeTab]);
 
   const handlePlay = (song: any, contextQueue: any[]) => {
@@ -193,7 +197,23 @@ export default function Search() {
                     ))}
                   </div>
                 )}
-                {activeTab === 'all' && !results.songs?.length && !results.albums?.length && !results.artists?.length && (
+                {(activeTab === 'all' || activeTab === 'playlists') && (activeTab === 'all' ? results.playlists : results)?.length > 0 && (
+                  <div className="mb-4">
+                    {activeTab === 'all' && <h3 className="text-text font-bold px-4 mb-2">Playlists</h3>}
+                    {(activeTab === 'all' ? results.playlists : results).slice(0, activeTab === 'all' ? 4 : 30).map((item: any) => (
+                      <button key={item.id} onClick={() => navigate(`/playlist/${item.id}`)} className="flex items-center gap-3 px-4 py-3 w-full">
+                        <div className="w-12 h-12 rounded-xl overflow-hidden flex-shrink-0 bg-surface-2">
+                          {getSongImage(item) && <img src={getSongImage(item)} alt={item.name} className="w-full h-full object-cover" />}
+                        </div>
+                        <div className="flex-1 min-w-0 text-left">
+                          <p className="text-text text-sm font-semibold line-clamp-1">{item.name}</p>
+                          <p className="text-muted text-xs capitalize">Playlist</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {activeTab === 'all' && !results.songs?.length && !results.albums?.length && !results.artists?.length && !results.playlists?.length && (
                   <div className="text-center py-12 px-4"><p className="text-muted">No results for "{query}"</p></div>
                 )}
                 {activeTab !== 'all' && results.length === 0 && (

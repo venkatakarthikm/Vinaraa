@@ -24,6 +24,9 @@ export class VinaraaPlayerWebStub extends WebPlugin implements VinaraaPlayerPlug
     this.currentSongId = songId;
     if (this.audio) { this.audio.pause(); this.audio = null; }
     this.audio = new Audio(streamUrl);
+    this.audio.addEventListener('ended', () => {
+      this.notifyListeners('playbackStateChanged', { type: 'ended', isPlaying: false, songId: this.currentSongId });
+    });
     this.audio.play().catch((err) => {
       console.warn('[VinaraaPlayer Web] Could not autoplay:', err.message);
     });

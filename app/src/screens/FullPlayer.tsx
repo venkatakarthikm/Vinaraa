@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useDragControls } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { usePlayerStore } from '@/store/player';
 import { tracking } from '@/api/endpoints';
@@ -14,6 +14,7 @@ import { VinaraaPlayer } from '@/native/player';
 type PlayerTab = 'photo' | 'lyrics' | 'info';
 
 function formatTime(ms: number) {
+  if (!ms || isNaN(ms)) return '0:00';
   const s = Math.floor(ms / 1000);
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
@@ -32,16 +33,26 @@ export default function FullPlayer() {
   const [seekValue, setSeekValue] = useState(0);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const positionRef = useRef(positionMs);
-  positionRef.current = positionMs;
+  const lyricsContainerRef = useRef<HTMLDivElement>(null);
+  const dragControls = useDragControls();
 
+  positionRef.current = positionMs;
   const song = currentSong();
+
+  const sessionIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!song?.id) return;
-    tracking.startSession(song.id).then((s) => setSessionId(s.sessionId)).catch(() => {});
+    let currentSessionId = '';
+    tracking.startSession(song.id).then((s) => {
+      currentSessionId = s.sessionId;
+      sessionIdRef.current = s.sessionId;
+      setSessionId(s.sessionId);
+    }).catch(() => {});
     playlists.isLiked(song.id).then((res) => setLiked(res.liked)).catch(() => {});
     return () => {
-      if (sessionId) tracking.endSession(sessionId, Math.round(positionRef.current)).catch(() => {});
+      const sid = currentSessionId || sessionIdRef.current;
+      if (sid) tracking.endSession(sid, Math.round(positionRef.current)).catch(() => {});
     };
   }, [song?.id]);
 
@@ -85,14 +96,15 @@ export default function FullPlayer() {
   }, [playerTab, song?.id]);
 
   useEffect(() => {
-    if (playerTab === 'lyrics' && lyrics?.type === 'synced') {
-      const activeEl = document.getElementById('active-lyric');
+    if (playerTab === 'lyrics' && lyrics?.type === 'synced' && lyricsContainerRef.current) {
+      const activeEl = lyricsContainerRef.current.querySelector('#active-lyric');
       if (activeEl) {
-        activeEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const container = lyricsContainerRef.current;
+        const scrollTarget = (activeEl as HTMLElement).offsetTop - container.clientHeight / 2 + (activeEl as HTMLElement).clientHeight / 2;
+        container.scrollTo({ top: scrollTarget, behavior: 'smooth' });
       }
     }
   }, [positionMs, playerTab, lyrics]);
-
 
   const progress = durationMs ? (seeking ? seekValue : positionMs / durationMs) : 0;
 
@@ -130,38 +142,47 @@ export default function FullPlayer() {
   const handleShare = async () => {
     if (!song) return;
     try {
-      const shareData = {
-        title: `Listen to ${song.name} by ${song.artist}`,
-        text: `Check out ${song.name} by ${song.artist} on Vinaraa!`,
-        url: window.location.href,
-      };
-      if (navigator.share) await navigator.share(shareData);
-      else console.log('Share not supported');
-    } catch (e) { console.error('Error sharing', e); }
+      if (navigator.share) await navigator.share({ title: `Listen to ${song.name}`, url: window.location.href });
+    } catch (e) { console.error(e); }
   };
 
   const handleDownload = async () => {
     if (!song?.streamUrl) return;
     try {
-      await VinaraaPlayer.download({
-        url: song.streamUrl,
-        title: song.name,
-        fileName: `${song.name} - ${song.artist}.mp3`
-      });
-      console.log('Download started');
+      await VinaraaPlayer.download({ url: song.streamUrl, title: song.name, fileName: `${song.name}.mp3` });
+    } catch (e) { console.error(e); }
+  };
+
+  const [showSaveSheet, setShowSaveSheet] = useState(false);
+  const [userPlaylists, setUserPlaylists] = useState<any[]>([]);
+  const [suggestedName, setSuggestedName] = useState('');
+
+  const handleSaveToPlaylistClick = async () => {
+    if (!song) return;
+    setShowSaveSheet(true);
+    try {
+      const [plRes, nameRes] = await Promise.all([
+        playlists.list(),
+        playlists.nameSuggestion()
+      ]);
+      setUserPlaylists(Array.isArray(plRes) ? plRes.filter((p: any) => !p.isSystem) : (plRes?.items || []).filter((p: any) => !p.isSystem));
+      setSuggestedName(nameRes?.suggestedName || 'New Playlist');
     } catch (e) {
-      console.error('Download failed', e);
+      console.error(e);
     }
   };
 
-  const handleSaveToPlaylist = async () => {
+  const handleAddToPlaylist = async (playlistId?: string) => {
     if (!song) return;
     try {
-      await playlists.saveSong({ songId: song.id });
-      // Visual feedback could be added here
-      console.log('Saved to playlist');
+      if (playlistId) {
+        await playlists.saveSong({ songId: song.id, playlistId });
+      } else {
+        await playlists.saveSong({ songId: song.id, newPlaylistName: suggestedName });
+      }
+      setShowSaveSheet(false);
     } catch (e) {
-      console.error('Failed to save to playlist', e);
+      console.error(e);
     }
   };
 
@@ -176,51 +197,54 @@ export default function FullPlayer() {
 
   return (
     <motion.div
-      className="flex flex-col h-full bg-bg"
+      className="flex flex-col h-full bg-bg overflow-hidden relative"
       initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
       transition={springs.sheet}
+      drag="y"
+      dragConstraints={{ top: 0, bottom: 0 }}
+      dragElastic={0.4}
+      dragListener={false}
+      dragControls={dragControls}
+      onDragEnd={(_, info) => { if (info.offset.y > 100) { setShowPlayer(false); navigate(-1); } }}
     >
-      <div className="flex items-center justify-between px-5 pt-4 pb-2"
-        style={{ paddingTop: `calc(env(safe-area-inset-top) + 16px)` }}>
-        <button onClick={() => { setShowPlayer(false); navigate(-1); }} className="p-2" aria-label="Close player">
-          <ChevronDown size={26} className="text-text" />
+      <div 
+        className="flex items-center justify-between px-5 pt-4 pb-2"
+        style={{ paddingTop: `calc(env(safe-area-inset-top) + 16px)` }}
+        onPointerDown={(e) => dragControls.start(e)}
+      >
+        <button onClick={() => { setShowPlayer(false); navigate(-1); }} className="p-2 -ml-2" aria-label="Close player">
+          <ChevronDown size={28} className="text-text" />
         </button>
-        <p className="text-muted text-xs uppercase tracking-widest">Now Playing</p>
-        <button className="p-2" aria-label="More options">
-          <MoreHorizontal size={24} className="text-text" />
+        <div className="w-12 h-1.5 bg-border rounded-full opacity-50 absolute left-1/2 -translate-x-1/2 top-4" />
+        <p className="text-muted text-[10px] uppercase tracking-widest font-bold">Now Playing</p>
+        <button className="p-2 -mr-2" aria-label="More options">
+          <MoreHorizontal size={26} className="text-text" />
         </button>
       </div>
 
-      <motion.div 
-        drag="y" dragConstraints={{ top: 0, bottom: 0 }} dragElastic={0.4}
-        onDragEnd={(_, info) => { if (info.offset.y > 100) { setShowPlayer(false); navigate(-1); } }}
-        className="w-full flex justify-center py-2 -mt-4 mb-2 z-10 relative"
-      >
-        <div className="w-12 h-1.5 bg-border rounded-full opacity-50" />
-      </motion.div>
-
-      <div className="flex mx-5 bg-surface-2 rounded-pill p-1 mb-4">
-        {(['photo', 'lyrics', 'info'] as PlayerTab[]).map((tab) => (
+      <div className="flex mx-5 bg-surface-2 rounded-full p-1 mb-4 mt-2">
+        {TABS.map((tab) => (
           <button key={tab} onClick={() => setPlayerTab(tab)}
-            className={`flex-1 py-2 rounded-pill text-sm font-semibold transition-all capitalize ${playerTab === tab ? 'bg-primary text-white shadow-colored' : 'text-muted'}`}>
+            className={`flex-1 py-1.5 rounded-full text-xs font-bold transition-all capitalize ${playerTab === tab ? 'bg-primary text-white shadow-colored' : 'text-muted'}`}>
             {tab}
           </button>
         ))}
       </div>
 
       <motion.div 
-        className="flex-1 px-5 min-h-0"
+        className="flex-1 px-5 min-h-0 w-full"
         drag="x" dragConstraints={{ left: 0, right: 0 }} dragElastic={0.2}
         onDragEnd={handleSwipeTabs}
       >
         <AnimatePresence mode="wait">
           {playerTab === 'photo' && (
             <motion.div key="photo" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="flex flex-col items-center justify-center h-full">
+              className="flex flex-col items-center justify-center h-full touch-none"
+              onPointerDown={(e) => dragControls.start(e)}>
               <motion.div
-                className="w-72 h-72 rounded-3xl overflow-hidden shadow-colored"
-                animate={isPlaying ? { scale: [1, 1.01, 1] } : { scale: 1 }}
-                transition={{ repeat: Infinity, duration: 3 }}
+                className="w-full aspect-square max-w-[320px] rounded-[32px] overflow-hidden shadow-[0_20px_50px_-12px_rgba(139,61,255,0.4)]"
+                animate={isPlaying ? { scale: [1, 1.02, 1] } : { scale: 1 }}
+                transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
               >
                 {song.image ? (
                   <img src={song.image} alt={song.name} className="w-full h-full object-cover" />
@@ -234,27 +258,31 @@ export default function FullPlayer() {
           )}
           {playerTab === 'lyrics' && (
             <motion.div key="lyrics" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="h-full overflow-y-auto scroll-y text-center py-4 px-2">
+              ref={lyricsContainerRef}
+              className="h-full overflow-y-auto scroll-y text-center py-4 px-2 select-none relative"
+              onPointerDown={(e) => e.stopPropagation()}>
               {!lyrics ? <p className="text-muted pt-20">Loading lyrics…</p>
                 : lyrics.type === 'synced' ? (
-                  <div className="flex flex-col gap-3 pb-32 pt-16">
+                  <div className="flex flex-col gap-4 pb-[50vh] pt-[25vh]">
                     {lyrics.lines.map((l: any, i: number) => {
                       const isActive = (positionMs / 1000) >= l.t && (i === lyrics.lines.length - 1 || (positionMs / 1000) < lyrics.lines[i + 1].t);
                       return (
-                        <p key={i} id={isActive ? 'active-lyric' : undefined} className={`text-lg font-bold transition-all duration-300 ${isActive ? 'text-primary-soft scale-110' : 'text-text/40'}`}>
+                        <p key={i} id={isActive ? 'active-lyric' : undefined} 
+                          className={`text-2xl font-bold transition-all duration-500 ease-out ${isActive ? 'text-primary-soft scale-110 drop-shadow-[0_0_12px_rgba(139,61,255,0.8)]' : 'text-text/30'}`}>
                           {l.x}
                         </p>
                       );
                     })}
                   </div>
                 ) : lyrics.lyrics ? (
-                  <pre className="text-text/80 font-sans text-base leading-9 whitespace-pre-wrap pb-32 pt-4">{lyrics.lyrics}</pre>
+                  <pre className="text-text/80 font-sans text-lg leading-10 whitespace-pre-wrap pb-[30vh] pt-4">{lyrics.lyrics}</pre>
                 ) : <p className="text-muted pt-20">Lyrics not available</p>}
             </motion.div>
           )}
           {playerTab === 'info' && (
             <motion.div key="info" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="h-full overflow-y-auto scroll-y py-4 flex flex-col gap-6 px-2 pb-32">
+              className="h-full overflow-y-auto scroll-y py-4 flex flex-col gap-6 px-2 pb-32"
+              onPointerDown={(e) => e.stopPropagation()}>
               {song.album && (
                 <div>
                   <p className="text-muted text-xs uppercase tracking-wider mb-1">Album / Movie</p>
@@ -266,37 +294,7 @@ export default function FullPlayer() {
                   <p className="text-muted text-xs uppercase tracking-wider mb-1">Singer(s)</p>
                   <div className="flex flex-wrap gap-2 mt-1.5">
                     {song.singers.map((a: any) => (
-                      <span key={a.id} className="bg-surface-2 text-text px-3 py-1.5 rounded-full text-sm font-medium">{a.name}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {song.musicDirectors && song.musicDirectors.length > 0 && (
-                <div>
-                  <p className="text-muted text-xs uppercase tracking-wider mb-1">Music Director</p>
-                  <div className="flex flex-wrap gap-2 mt-1.5">
-                    {song.musicDirectors.map((a: any) => (
-                      <span key={a.id} className="bg-surface-2 text-text px-3 py-1.5 rounded-full text-sm font-medium">{a.name}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {song.actors && song.actors.length > 0 && (
-                <div>
-                  <p className="text-muted text-xs uppercase tracking-wider mb-1">Cast / Actors</p>
-                  <div className="flex flex-wrap gap-2 mt-1.5">
-                    {song.actors.map((a: any) => (
-                      <span key={a.id} className="bg-surface-2 text-text px-3 py-1.5 rounded-full text-sm font-medium">{a.name}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {song.lyricists && song.lyricists.length > 0 && (
-                <div>
-                  <p className="text-muted text-xs uppercase tracking-wider mb-1">Lyricist</p>
-                  <div className="flex flex-wrap gap-2 mt-1.5">
-                    {song.lyricists.map((a: any) => (
-                      <span key={a.id} className="bg-surface-2 text-text px-3 py-1.5 rounded-full text-sm font-medium">{a.name}</span>
+                      <span key={a.id} className="bg-surface-2 border border-border text-text px-4 py-1.5 rounded-full text-sm font-medium">{a.name}</span>
                     ))}
                   </div>
                 </div>
@@ -318,80 +316,123 @@ export default function FullPlayer() {
         </AnimatePresence>
       </motion.div>
 
-      <div className="px-5 py-4 flex items-center justify-between">
-        <div className="min-w-0">
-          <h2 className="text-text text-xl font-bold leading-tight line-clamp-1">{song.name}</h2>
-          <p className="text-muted text-sm line-clamp-1">{song.artist}</p>
+      <div className="px-6 py-2 flex items-center justify-between bg-gradient-to-t from-bg via-bg to-transparent">
+        <div className="min-w-0 pr-4">
+          <h2 className="text-text text-2xl font-bold leading-tight line-clamp-1">{song.name}</h2>
+          <p className="text-muted text-sm font-medium line-clamp-1 mt-1">{song.artist}</p>
         </div>
         <motion.button
           onClick={handleLike}
           whileTap={{ scale: 1.35 }}
           transition={{ type: 'spring' as const, stiffness: 500, damping: 15 }}
-          className="p-2 ml-4 flex-shrink-0"
+          className="p-3 bg-surface-2 rounded-full border border-border flex-shrink-0"
           aria-label={liked ? 'Unlike' : 'Like'}
         >
-          <Heart size={26} fill={liked ? '#FF3D8E' : 'none'} className={liked ? 'text-accent' : 'text-muted'} />
+          <Heart size={24} fill={liked ? '#FF3D8E' : 'none'} className={liked ? 'text-[#FF3D8E]' : 'text-text'} />
         </motion.button>
       </div>
 
-      <div className="px-5 mb-2">
+      <div className="px-6 mb-2 mt-2">
         <input
           type="range" min={0} max={1} step={0.001}
           value={seeking ? seekValue : progress}
           onChange={handleSeekChange}
           onMouseUp={handleSeekCommit as any}
           onTouchEnd={handleSeekCommit as any}
-          className="w-full h-1.5 appearance-none rounded-full outline-none cursor-pointer"
-          style={{ background: `linear-gradient(to right, #8B3DFF ${progress * 100}%, #1D1D3A ${progress * 100}%)` }}
+          className="w-full h-1.5 appearance-none rounded-full outline-none cursor-pointer bg-surface-2"
+          style={{ backgroundImage: `linear-gradient(to right, #8B3DFF ${progress * 100}%, transparent ${progress * 100}%)` }}
           aria-label="Seek"
         />
-        <div className="flex justify-between mt-1">
-          <span className="text-muted text-xs">{formatTime(positionMs)}</span>
-          <span className="text-muted text-xs">{formatTime(durationMs)}</span>
+        <div className="flex justify-between mt-2">
+          <span className="text-muted text-xs font-medium tracking-wide">{formatTime(positionMs)}</span>
+          <span className="text-muted text-xs font-medium tracking-wide">{formatTime(durationMs)}</span>
         </div>
       </div>
 
-      <div className="px-6 pb-4">
-        <div className="flex items-center justify-between mb-4">
+      <div className="px-6 pb-2">
+        <div className="flex items-center justify-between mb-2">
           <button onClick={() => setShuffle(!shuffle)} className="p-2" aria-label="Shuffle">
-            <Shuffle size={22} className={shuffle ? 'text-primary-soft' : 'text-muted'} />
+            <Shuffle size={24} className={shuffle ? 'text-primary-soft' : 'text-muted'} />
           </button>
           <button onClick={previousTrack} className="p-2" aria-label="Previous">
-            <SkipBack size={30} className="text-text" fill="currentColor" />
+            <SkipBack size={36} className="text-text" fill="currentColor" />
           </button>
           <motion.button
             onClick={() => togglePlay()}
-            whileTap={{ scale: 0.94 }}
-            className="bg-gradient-to-r from-primary to-primary-soft rounded-3xl flex items-center justify-center shadow-colored"
+            whileTap={{ scale: 0.92 }}
+            className="bg-primary rounded-full flex items-center justify-center shadow-[0_8px_30px_rgba(139,61,255,0.5)]"
             aria-label={isPlaying ? 'Pause' : 'Play'}
-            style={{ width: 72, height: 72 }}
+            style={{ width: 80, height: 80 }}
           >
             <AnimatePresence mode="wait">
               {isPlaying ? (
                 <motion.div key="pause" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}>
-                  <Pause size={32} fill="white" className="text-white" />
+                  <Pause size={38} fill="white" className="text-white" />
                 </motion.div>
               ) : (
                 <motion.div key="play" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}>
-                  <Play size={32} fill="white" className="text-white ml-1" />
+                  <Play size={38} fill="white" className="text-white ml-2" />
                 </motion.div>
               )}
             </AnimatePresence>
           </motion.button>
           <button onClick={nextTrack} className="p-2" aria-label="Next">
-            <SkipForward size={30} className="text-text" fill="currentColor" />
+            <SkipForward size={36} className="text-text" fill="currentColor" />
           </button>
           <button onClick={toggleRepeat} className="p-2" aria-label="Repeat">
-            {repeat === 'one' ? <Repeat1 size={22} className="text-primary-soft" /> : <Repeat size={22} className={repeat === 'all' ? 'text-primary-soft' : 'text-muted'} />}
+            {repeat === 'one' ? <Repeat1 size={24} className="text-primary-soft" /> : <Repeat size={24} className={repeat === 'all' ? 'text-primary-soft' : 'text-muted'} />}
           </button>
         </div>
-        <div className="flex items-center justify-center gap-10 mt-2">
-          <button onClick={handleSaveToPlaylist} className="p-3 bg-surface-2 rounded-full border border-border" aria-label="Add to playlist"><Plus size={22} className="text-text" /></button>
-          <button onClick={handleDownload} className="p-3 bg-surface-2 rounded-full border border-border" aria-label="Download"><Download size={22} className="text-text" /></button>
-          <button onClick={handleShare} className="p-3 bg-surface-2 rounded-full border border-border" aria-label="Share"><Share2 size={22} className="text-text" /></button>
+        <div className="flex items-center justify-center gap-8 mt-4 pb-2">
+          <button onClick={handleSaveToPlaylistClick} className="p-3 bg-surface-2 rounded-full border border-border" aria-label="Add to playlist"><Plus size={20} className="text-text" /></button>
+          <button onClick={handleDownload} className="p-3 bg-surface-2 rounded-full border border-border" aria-label="Download"><Download size={20} className="text-text" /></button>
+          <button onClick={handleShare} className="p-3 bg-surface-2 rounded-full border border-border" aria-label="Share"><Share2 size={20} className="text-text" /></button>
         </div>
       </div>
       <div style={{ paddingBottom: 'env(safe-area-inset-bottom)' }} />
+
+      <AnimatePresence>
+        {showSaveSheet && (
+          <motion.div
+            className="absolute inset-0 z-50 flex flex-col justify-end"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          >
+            <div className="absolute inset-0 bg-black/60" onClick={() => setShowSaveSheet(false)} />
+            <motion.div
+              className="bg-surface rounded-t-3xl pb-safe flex flex-col max-h-[70vh]"
+              initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+              transition={springs.sheet}
+            >
+              <div className="p-5 flex flex-col h-full">
+                <div className="w-12 h-1.5 bg-border rounded-full opacity-50 mx-auto mb-4" />
+                <h3 className="text-text font-bold text-xl mb-4">Save to Playlist</h3>
+                <div className="flex-1 overflow-y-auto scroll-y pr-2">
+                  <button onClick={() => handleAddToPlaylist()} className="flex items-center gap-4 py-3 w-full border-b border-border mb-2">
+                    <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center flex-shrink-0">
+                      <Plus size={24} className="text-primary-soft" />
+                    </div>
+                    <div className="text-left flex-1">
+                      <p className="text-text font-bold">New Playlist</p>
+                      <p className="text-muted text-xs">{suggestedName}</p>
+                    </div>
+                  </button>
+                  {userPlaylists.map((pl) => (
+                    <button key={pl.id || pl._id} onClick={() => handleAddToPlaylist(pl.id || pl._id)} className="flex items-center gap-4 py-3 w-full">
+                      <div className="w-12 h-12 rounded-xl bg-surface-2 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                        {pl.coverImageUrl || pl.artwork ? <img src={pl.coverImageUrl || pl.artwork} alt={pl.name} className="w-full h-full object-cover" /> : <span className="text-muted text-xl">🎵</span>}
+                      </div>
+                      <div className="text-left flex-1">
+                        <p className="text-text font-bold">{pl.name}</p>
+                        <p className="text-muted text-xs">{pl.trackCount || 0} songs</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

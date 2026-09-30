@@ -9,7 +9,6 @@ import { formatPlayerSong, getArtistsText } from '@/utils/song';
 import { getSongImage } from '@/utils/image';
 
 export default function PlaylistPage() {
-  const [_id] = useState('');
   const { id } = { id: window.location.pathname.split('/').pop() };
   const [playlist, setPlaylist] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -23,8 +22,8 @@ export default function PlaylistPage() {
   }, [id]);
 
   const handlePlay = (startIndex = 0) => {
-    if (!playlist?.songs?.length) return;
-    const songs = playlist.songs.map((s: any) => formatPlayerSong(s));
+    if (!playlist?.tracks?.length) return;
+    const songs = playlist.tracks.map((s: any) => formatPlayerSong(s));
     setQueue(songs, startIndex);
     setShowPlayer(true);
     navigate('/player');
@@ -33,14 +32,16 @@ export default function PlaylistPage() {
   const removeSong = async (songId: string) => {
     if (!id) return;
     await playlists.removeTrack(id, { songIds: [songId] });
-    setPlaylist((pl: any) => ({ ...pl, songs: pl.songs.filter((s: any) => (s.id || s.saavnId) !== songId) }));
+    setPlaylist((pl: any) => ({ ...pl, tracks: pl.tracks.filter((s: any) => (s.songId || s.id || s.saavnId) !== songId) }));
   };
+
+  const coverUrl = playlist?.coverImageUrl || playlist?.artwork;
 
   return (
     <div className="flex flex-col h-full bg-bg">
       <div className="flex-1 overflow-y-auto scroll-y pb-safe">
         <div className="relative h-64">
-          {playlist?.artwork && <img src={playlist.artwork} alt={playlist.name} className="absolute inset-0 w-full h-full object-cover" />}
+          {coverUrl && <img src={coverUrl} alt={playlist.name} className="absolute inset-0 w-full h-full object-cover" />}
           <div className="absolute inset-0 bg-gradient-to-b from-black/30 to-bg" />
           <button onClick={() => navigate(-1)}
             className="absolute top-4 left-4 p-2.5 rounded-full bg-black/40 backdrop-blur-sm"
@@ -55,8 +56,8 @@ export default function PlaylistPage() {
             <>
               <h1 className="text-2xl font-bold text-text mb-1">{playlist?.name}</h1>
               <div className="flex items-center gap-2 mb-4 text-xs text-muted">
-                {playlist?.isPublic && <Globe size={12} />}
-                <span>{playlist?.songs?.length || 0} songs</span>
+                {playlist?.visibility === 'public' && <Globe size={12} />}
+                <span>{playlist?.tracks?.length || playlist?.trackCount || 0} songs</span>
                 {playlist?.isSystem && <span className="bg-primary/20 text-primary-soft px-2 py-0.5 rounded-pill">System</span>}
               </div>
               <div className="flex gap-3 mb-5">
@@ -64,14 +65,14 @@ export default function PlaylistPage() {
                   className="flex-1 bg-gradient-to-r from-primary to-primary-soft text-white font-bold rounded-pill py-3 flex items-center justify-center gap-2 shadow-colored">
                   <Play size={18} fill="white" />Play
                 </button>
-                <button onClick={() => handlePlay(Math.floor(Math.random() * (playlist?.songs?.length || 1)))}
+                <button onClick={() => handlePlay(Math.floor(Math.random() * (playlist?.tracks?.length || 1)))}
                   className="flex-1 bg-surface-2 border border-border text-text font-bold rounded-pill py-3 flex items-center justify-center gap-2">
                   <Shuffle size={18} />Shuffle
                 </button>
               </div>
               <h2 className="text-text font-bold mb-3">Songs</h2>
-              {playlist?.songs?.map((song: any, i: number) => (
-                <div key={song.id || song.saavnId} className="flex items-center gap-3 py-3">
+              {playlist?.tracks?.map((song: any, i: number) => (
+                <div key={song.songId || song.id || song.saavnId} className="flex items-center gap-3 py-3">
                   <button onClick={() => handlePlay(i)} className="flex items-center gap-3 flex-1 min-w-0">
                     <div className="w-12 h-12 rounded-xl overflow-hidden flex-shrink-0 bg-surface-2">
                       {getSongImage(song) && <img src={getSongImage(song)} alt={song.name} className="w-full h-full object-cover" />}
@@ -83,8 +84,8 @@ export default function PlaylistPage() {
                       </p>
                     </div>
                   </button>
-                  {!playlist?.isSystem && (
-                    <button onClick={() => removeSong(song.id || song.saavnId)} className="p-2 text-muted flex-shrink-0" aria-label="Remove">
+                  {!playlist?.isSystem && playlist?.isOwner !== false && (
+                    <button onClick={() => removeSong(song.songId || song.id || song.saavnId)} className="p-2 text-muted flex-shrink-0" aria-label="Remove">
                       <Trash2 size={16} />
                     </button>
                   )}

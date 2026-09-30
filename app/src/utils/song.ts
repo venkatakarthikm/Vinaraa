@@ -14,7 +14,7 @@ export function getArtistsText(song: any) {
 
 export function formatPlayerSong(song: any) {
   return {
-    id: song?.id || song?.saavnId || song?._id,
+    id: song?.songId || song?.id || song?.saavnId || song?._id,
     name: song?.name || 'Unknown Song',
     artist: getArtistsText(song),
     image: getSongImage(song),

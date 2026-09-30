@@ -40,6 +40,8 @@ export default function Onboarding() {
   const stepKey = step?.key || stepOrder[currentStep];
   const currentSelections = selections[stepKey] || new Set<string>();
 
+  const [error, setError] = useState('');
+
   const toggleItem = (itemId: string) => {
     setSelections((prev) => {
       const set = new Set(prev[stepKey]);
@@ -54,24 +56,42 @@ export default function Onboarding() {
     return !search || text.toLowerCase().includes(search.toLowerCase());
   });
 
+  const getMappedItems = (stepName: string) => {
+    return [...(selections[stepName] || [])].map((id) => {
+      const item = bundle?.steps?.find((s) => s.key === stepName)?.items?.find((i) => (i.id || i.code || i.name) === id);
+      return item ? { id: item.id || item.code || item.name, name: item.name || item.label } : { id, name: id };
+    }).filter(i => i.id);
+  };
+
   const handleContinue = async () => {
-    if (currentStep < stepOrder.length - 1) { setCurrentStep((s) => s + 1); setSearch(''); return; }
+    if (currentStep < stepOrder.length - 1) { setCurrentStep((s) => s + 1); setSearch(''); setError(''); return; }
     setCompleting(true);
+    setError('');
     try {
       const body = {
         languages: [...(selections.languages || [])],
-        favouriteMovies: [...(selections.movies || [])].map((id) => {
-          const item = bundle?.steps?.find((s) => s.key === 'movies')?.items?.find((i) => i.id === id || i.code === id);
-          return item ? { id: item.id || item.code, name: item.name || item.label } : { id, name: id };
-        }),
-        actors: [...(selections.actors || [])].map((id) => { return { id, name: id }; }),
-        singers: [...(selections.singers || [])].map((id) => { return { id, name: id }; }),
-        musicDirectors: [...(selections.directors || [])].map((id) => { return { id, name: id }; }),
+        favouriteMovies: getMappedItems('movies'),
+        actors: getMappedItems('actors'),
+        singers: getMappedItems('singers'),
+        musicDirectors: getMappedItems('directors'),
       };
       await onboardingApi.complete(body);
-    } catch (_e) {}
-    navigate('/home', { replace: true });
-    setCompleting(false);
+      navigate('/home', { replace: true });
+    } catch (e: any) {
+      setError(e.message || 'Failed to save preferences. Please try again.');
+      setCompleting(false);
+    }
+  };
+
+  const handleSkip = async () => {
+    setCompleting(true);
+    try {
+      await onboardingApi.complete({ skipped: true });
+      navigate('/home', { replace: true });
+    } catch (e: any) {
+      setError(e.message || 'Failed to skip. Please try again.');
+      setCompleting(false);
+    }
   };
 
   if (loading) {
@@ -104,7 +124,7 @@ export default function Onboarding() {
     <div className="flex flex-col h-full bg-bg">
       <div className="flex items-center gap-3 px-4 pt-6 pb-4">
         {currentStep > 0 && (
-          <button onClick={() => { setCurrentStep((s) => s - 1); setSearch(''); }}
+          <button onClick={() => { setCurrentStep((s) => s - 1); setSearch(''); setError(''); }}
             className="p-2 rounded-full bg-surface-2 flex-shrink-0" aria-label="Back">
             <ChevronLeft size={22} className="text-text" />
           </button>
@@ -114,7 +134,7 @@ export default function Onboarding() {
             <div key={i} className={`flex-1 h-1 rounded-pill transition-all duration-300 ${i <= currentStep ? 'bg-primary' : 'bg-surface-2'}`} />
           ))}
         </div>
-        <button onClick={() => navigate('/home', { replace: true })} className="text-muted text-sm font-medium px-2">Skip</button>
+        <button onClick={handleSkip} className="text-muted text-sm font-medium px-2">Skip</button>
       </div>
 
       <div className="px-5 pb-4">
@@ -123,6 +143,7 @@ export default function Onboarding() {
           {step?.title || 'Pick your favourites'}
         </motion.h1>
         <p className="text-muted text-sm mt-1">{currentSelections.size > 0 ? `${currentSelections.size} selected` : 'Tap to select'}</p>
+        {error && <p className="text-danger text-sm mt-2">{error}</p>}
       </div>
 
       {stepKey !== 'languages' && (
@@ -141,7 +162,7 @@ export default function Onboarding() {
         <motion.div key={currentStep} initial={{ opacity: 0 }} animate={{ opacity: 1 }}
           className={stepKey === 'languages' ? 'flex flex-col gap-2' : 'grid grid-cols-3 gap-3'}>
           {filteredItems.map((item, idx) => {
-            const itemId = item.id || item.code || '';
+            const itemId = item.id || item.code || item.name || '';
             const isSelected = currentSelections.has(itemId);
             return (
               <motion.button key={itemId} custom={idx}

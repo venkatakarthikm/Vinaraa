@@ -48,7 +48,19 @@ router.get(
   asyncHandler(async (req, res) => {
     await playlistService.ensureSystemPlaylists(req.user).catch(() => {});
     const liked = await playlistService.getSystemPlaylist(req.user._id, playlistService.SYSTEM.liked.key);
-    return ok(res, liked || { tracks: [], trackCount: 0 });
+    if (!liked || !liked.tracks.length) return ok(res, { tracks: [], trackCount: 0 });
+    
+    const Song = require('../models/Song');
+    const catalog = require('../services/catalog');
+    const songs = await Song.find({ saavnId: { $in: liked.tracks.map((t) => t.songId) } }).lean();
+    const map = new Map(songs.map((s) => [s.saavnId, s]));
+    
+    const populatedTracks = liked.tracks.map((t) => {
+      const s = map.get(t.songId);
+      return s ? catalog.toClientSong(s) : t;
+    });
+
+    return ok(res, { ...liked.toJSON(), tracks: populatedTracks });
   })
 );
 
@@ -123,7 +135,23 @@ router.get(
   '/:id',
   asyncHandler(async (req, res) => {
     const playlist = await playlistService.get(req.user, req.params.id);
-    return ok(res, { ...playlist.toJSON(), isOwner: String(playlist.owner) === String(req.user._id) });
+    const isOwner = String(playlist.owner) === String(req.user._id);
+    
+    if (!playlist.tracks || !playlist.tracks.length) {
+      return ok(res, { ...playlist.toJSON(), isOwner, tracks: [] });
+    }
+
+    const Song = require('../models/Song');
+    const catalog = require('../services/catalog');
+    const songs = await Song.find({ saavnId: { $in: playlist.tracks.map((t) => t.songId) } }).lean();
+    const map = new Map(songs.map((s) => [s.saavnId, s]));
+    
+    const populatedTracks = playlist.tracks.map((t) => {
+      const s = map.get(t.songId);
+      return s ? catalog.toClientSong(s) : t;
+    });
+
+    return ok(res, { ...playlist.toJSON(), isOwner, tracks: populatedTracks });
   })
 );
 

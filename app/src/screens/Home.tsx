@@ -6,7 +6,7 @@ import { useAuthStore } from '@/store/auth';
 import { useUIStore } from '@/store/ui';
 import { useNavigate } from 'react-router-dom';
 import { SongRowSkeleton, CardSkeleton } from '@/components/Skeleton';
-import { Bell, TrendingUp, Play, ChevronRight } from 'lucide-react';
+import { Bell, Play, ChevronRight, Music2, Sparkles, Mic2, Film } from 'lucide-react';
 import MiniPlayer from '@/components/MiniPlayer';
 import { getSongImage } from '@/utils/image';
 import { formatPlayerSong, getArtistsText } from '@/utils/song';
@@ -29,53 +29,57 @@ function getGreeting() {
   return 'Good Evening';
 }
 
-function SongCard({ song, onPlay, index, contextQueue }: { song: any; onPlay: (s: any, q: any[]) => void; index: number, contextQueue: any[] }) {
+function QuickPickCard({ song, onPlay, index, contextQueue }: { song: any; onPlay: (s: any, q: any[]) => void; index: number, contextQueue: any[] }) {
   return (
     <motion.button
       custom={index} variants={listStaggerVariants} initial="initial" animate="animate"
-      whileTap={{ scale: 0.97 }} onClick={() => onPlay(song, contextQueue)} className="flex-shrink-0 w-36"
+      whileTap={{ scale: 0.95 }}
+      onClick={() => onPlay(song, contextQueue)}
+      className="flex items-center gap-3 bg-surface-2/60 hover:bg-surface-2 rounded-xl overflow-hidden shadow-sm"
     >
-      <div className="relative w-36 h-36 rounded-2xl overflow-hidden mb-2">
+      <div className="w-14 h-14 bg-surface flex-shrink-0 relative">
         {getSongImage(song) ? <img src={getSongImage(song)} alt={song.name} className="w-full h-full object-cover" />
-          : <div className="w-full h-full bg-surface-2 flex items-center justify-center"><Play size={24} className="text-muted" /></div>}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-        <div className="absolute bottom-2 right-2 bg-primary/80 rounded-full p-1.5">
-          <Play size={12} fill="white" className="text-white" />
+          : <div className="w-full h-full flex items-center justify-center"><Music2 size={20} className="text-muted" /></div>}
+        <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+          <Play size={20} fill="white" className="text-white" />
         </div>
       </div>
-      <p className="text-text text-xs font-semibold line-clamp-1">{song.name}</p>
-      <p className="text-muted text-[11px] line-clamp-1">
-        {getArtistsText(song)}
-      </p>
-      {song.matchPercent && (
-        <span className="inline-block mt-1 bg-mint/20 text-mint text-[10px] font-bold px-2 py-0.5 rounded-pill">
-          {song.matchPercent}% match
-        </span>
-      )}
+      <div className="flex-1 min-w-0 pr-3 text-left">
+        <p className="text-text text-xs font-bold line-clamp-2 leading-tight">{song.name}</p>
+      </div>
     </motion.button>
   );
 }
 
-function SongRow({ song, index, onPlay, contextQueue }: { song: any; index: number; onPlay: (s: any, q: any[]) => void, contextQueue: any[] }) {
+function ArtistCircle({ item, onClick }: { item: any, onClick: () => void }) {
   return (
     <motion.button
-      custom={index} variants={listStaggerVariants} initial="initial" animate="animate"
-      whileTap={{ scale: 0.98 }} onClick={() => onPlay(song, contextQueue)} className="flex items-center gap-3 px-4 py-3 w-full"
+      whileTap={{ scale: 0.92 }} onClick={onClick}
+      className="flex flex-col items-center gap-2 w-20 flex-shrink-0"
     >
-      <div className="w-12 h-12 rounded-xl overflow-hidden flex-shrink-0 bg-surface-2">
-        {getSongImage(song) && <img src={getSongImage(song)} alt={song.name} className="w-full h-full object-cover" />}
+      <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-surface-2 shadow-md relative">
+        {item.image ? <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+          : <div className="w-full h-full bg-surface-2 flex items-center justify-center"><Mic2 size={24} className="text-muted" /></div>}
       </div>
-      <div className="flex-1 min-w-0 text-left">
-        <p className="text-text text-sm font-semibold line-clamp-1">{song.name}</p>
-        <p className="text-muted text-xs line-clamp-1">
-          {getArtistsText(song)}
-        </p>
+      <p className="text-text text-xs font-semibold line-clamp-1 text-center w-full">{item.name}</p>
+    </motion.button>
+  );
+}
+
+function AlbumSquare({ item, onClick }: { item: any, onClick: () => void }) {
+  return (
+    <motion.button
+      whileTap={{ scale: 0.95 }} onClick={onClick}
+      className="flex flex-col gap-2 w-36 flex-shrink-0"
+    >
+      <div className="w-36 h-36 rounded-2xl overflow-hidden shadow-colored relative">
+        {item.image ? <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+          : <div className="w-full h-full bg-surface-2 flex items-center justify-center"><Film size={32} className="text-muted" /></div>}
       </div>
-      {song.durationMs && (
-        <span className="text-muted text-xs flex-shrink-0">
-          {Math.floor(song.durationMs / 60000)}:{String(Math.floor((song.durationMs % 60000) / 1000)).padStart(2, '0')}
-        </span>
-      )}
+      <div className="text-left">
+        <p className="text-text text-sm font-bold line-clamp-1">{item.name}</p>
+        <p className="text-muted text-[11px] line-clamp-1">{item.description || item.subtitle || 'Album'}</p>
+      </div>
     </motion.button>
   );
 }
@@ -113,74 +117,146 @@ export default function Home() {
     navigate(`/player/${queue[startIndex >= 0 ? startIndex : 0].id}`, { state: { song } });
   };
 
+  // Mock Music Directors for UI demonstration based on user request
+  const MUSIC_DIRECTORS = [
+    { id: '455663', name: 'Anirudh', image: 'https://c.saavncdn.com/artists/Anirudh_Ravichander_004_20230323061611_500x500.jpg' },
+    { id: '455130', name: 'Thaman S', image: 'https://c.saavncdn.com/artists/S._Thaman_002_20231019124439_500x500.jpg' },
+    { id: '456070', name: 'DSP', image: 'https://c.saavncdn.com/artists/Devi_Sri_Prasad_002_20230807185012_500x500.jpg' },
+    { id: '459320', name: 'A.R. Rahman', image: 'https://c.saavncdn.com/artists/AR_Rahman_002_20210120084455_500x500.jpg' },
+    { id: '455115', name: 'M.M. Keeravaani', image: 'https://c.saavncdn.com/artists/M_M_Keeravaani_002_20230323061239_500x500.jpg' },
+  ];
+
+  const uniqueTrending = trending.filter((v, i, a) => a.findIndex(t => (t.id || t.saavnId || t._id) === (v.id || v.saavnId || v._id) || uniqName(t) === uniqName(v)) === i);
+  const quickPicks = uniqueTrending.slice(0, 6);
+  const topSongs = uniqueTrending.slice(6, 20);
+
   return (
-    <div className="flex flex-col h-full bg-bg overflow-hidden">
-      <div className="flex-1 scroll-y overflow-y-auto pb-safe">
-        <div className="flex items-center justify-between px-5 pt-6 pb-4">
+    <div className="flex flex-col h-full bg-bg overflow-hidden relative">
+      <div className="absolute top-0 left-0 right-0 h-64 bg-gradient-to-b from-primary/10 to-bg z-0 pointer-events-none" />
+      
+      <div className="flex-1 scroll-y overflow-y-auto pb-24 z-10">
+        <div className="flex items-center justify-between px-5 pt-8 pb-6">
           <div>
-            <p className="text-muted text-sm">{getGreeting()}</p>
-            <h1 className="text-2xl font-bold text-text">{user?.name || 'Music Lover'} 👋</h1>
+            <p className="text-muted text-sm font-medium mb-0.5 flex items-center gap-1">
+              <Sparkles size={14} className="text-accent" /> {getGreeting()}
+            </p>
+            <h1 className="text-3xl font-extrabold text-text tracking-tight">{user?.name?.split(' ')[0] || 'Music Lover'}</h1>
           </div>
-          <div className="flex gap-2">
-            <button className="p-2.5 rounded-full bg-surface-2 border border-border" aria-label="Notifications">
-              <Bell size={20} className="text-muted" />
+          <div className="flex gap-3">
+            <button className="p-2.5 rounded-full bg-surface-2/80 backdrop-blur-md border border-white/5 shadow-sm" aria-label="Notifications">
+              <Bell size={22} className="text-text" />
             </button>
             <button onClick={() => navigate('/profile')}
-              className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center"
+              className="w-11 h-11 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-colored border-2 border-bg"
               aria-label="Profile">
-              <span className="text-white font-bold text-sm">{(user?.name || 'U')[0].toUpperCase()}</span>
+              <span className="text-white font-bold text-base">{(user?.name || 'U')[0].toUpperCase()}</span>
             </button>
           </div>
         </div>
 
-        <div className="mt-2">
-          <div className="flex items-center justify-between px-5 mb-3">
-            <div className="flex items-center gap-2">
-              <TrendingUp size={18} className="text-accent" />
-              <h2 className="text-text font-bold">Trending Now</h2>
-            </div>
-            <button className="text-primary-soft text-xs font-semibold flex items-center gap-1" aria-label="See all trending">
-              All <ChevronRight size={14} />
-            </button>
-          </div>
+        {/* Quick Picks */}
+        <div className="px-5 mb-8">
+          <h2 className="text-text font-bold text-lg mb-3">Quick Picks</h2>
           {loading ? (
-            <div className="flex gap-4 px-5 overflow-x-auto scroll-x pb-2">
-              {Array.from({ length: 4 }).map((_, i) => <CardSkeleton key={i} />)}
+            <div className="grid grid-cols-2 gap-3">
+              {Array.from({ length: 6 }).map((_, i) => <div key={i} className="shimmer h-14 rounded-xl" />)}
             </div>
           ) : (
-            <div className="flex gap-4 px-5 overflow-x-auto scroll-x pb-2">
-              {trending.filter((v, i, a) => a.findIndex(t => (t.id || t.saavnId || t._id) === (v.id || v.saavnId || v._id) || uniqName(t) === uniqName(v)) === i).slice(0, 10).map((song, i, arr) => (
-                <SongCard key={song.id || song.saavnId} song={song} onPlay={handlePlay} index={i} contextQueue={arr} />
+            <div className="grid grid-cols-2 gap-3">
+              {quickPicks.map((song, i) => (
+                <QuickPickCard key={song.id || song.saavnId} song={song} onPlay={handlePlay} index={i} contextQueue={quickPicks} />
               ))}
             </div>
           )}
         </div>
 
+        {/* Music Directors */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between px-5 mb-4">
+            <h2 className="text-text font-bold text-lg">Music Directors</h2>
+            <ChevronRight size={20} className="text-muted" />
+          </div>
+          <div className="flex gap-5 px-5 overflow-x-auto scroll-x pb-4 pt-1">
+            {MUSIC_DIRECTORS.map((artist) => (
+              <ArtistCircle key={artist.id} item={artist} onClick={() => navigate(`/artist/${artist.id}`)} />
+            ))}
+          </div>
+        </div>
+
+        {/* Dynamic Rails from Backend */}
         {loading ? (
-          <div className="mt-6 px-4">
-            <div className="shimmer h-5 w-40 rounded mb-4" />
-            {Array.from({ length: 4 }).map((_, i) => <SongRowSkeleton key={i} />)}
+          <div className="mt-6 px-5">
+            <div className="shimmer h-6 w-40 rounded mb-4" />
+            <div className="flex gap-4 overflow-x-hidden">
+              {Array.from({ length: 3 }).map((_, i) => <CardSkeleton key={i} />)}
+            </div>
           </div>
         ) : (
-          feed.map((rail) => (
-            <div key={rail.id} className="mt-6">
-              <h2 className="text-text font-bold px-5 mb-3">{rail.title}</h2>
-              {rail.items.filter((v: any, i: number, a: any[]) => a.findIndex(t => (t.id || t.saavnId || t._id) === (v.id || v.saavnId || v._id) || uniqName(t) === uniqName(v)) === i).slice(0, 8).map((song: any, i: number, arr: any[]) => (
-                <SongRow key={song.id || song.saavnId} song={song} index={i} onPlay={handlePlay} contextQueue={arr} />
-              ))}
+          feed.map((rail: any) => (
+            <div key={rail.key || rail.id} className="mb-8">
+              <div className="flex items-center justify-between px-5 mb-3">
+                <div>
+                  <h2 className="text-text font-bold text-lg">{rail.title}</h2>
+                  {rail.subtitle && <p className="text-muted text-[11px] font-medium leading-tight mt-0.5 max-w-[85%]">{rail.subtitle}</p>}
+                </div>
+                <ChevronRight size={20} className="text-muted flex-shrink-0" />
+              </div>
+              <div className="flex gap-4 px-5 overflow-x-auto scroll-x pb-4">
+                {rail.items.slice(0, 10).map((item: any, i: number) => {
+                  if (item.type === 'song') {
+                    return (
+                      <motion.button
+                        key={item.id} whileTap={{ scale: 0.95 }}
+                        onClick={() => handlePlay(item, rail.items.filter(x => x.type === 'song'))}
+                        className="flex flex-col gap-2 w-36 flex-shrink-0"
+                      >
+                        <div className="w-36 h-36 rounded-2xl overflow-hidden shadow-colored relative">
+                          {getSongImage(item) ? <img src={getSongImage(item)} alt={item.name} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-surface-2 flex items-center justify-center"><Music2 size={32} className="text-muted" /></div>}
+                          <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                            <Play size={32} fill="white" className="text-white" />
+                          </div>
+                        </div>
+                        <div className="text-left pr-2">
+                          <p className="text-text text-sm font-bold line-clamp-1">{item.name}</p>
+                          <p className="text-muted text-[11px] line-clamp-1">{getArtistsText(item)}</p>
+                        </div>
+                      </motion.button>
+                    );
+                  }
+                  return <AlbumSquare key={item.id} item={item} onClick={() => navigate(`/${item.type || 'album'}/${item.id}`)} />;
+                })}
+              </div>
             </div>
           ))
         )}
 
-        {!loading && feed.length === 0 && trending.length > 0 && (
-          <div className="mt-6">
-            <h2 className="text-text font-bold px-5 mb-3">Top Songs</h2>
-            {trending.filter((v, i, a) => a.findIndex(t => (t.id || t.saavnId || t._id) === (v.id || v.saavnId || v._id) || uniqName(t) === uniqName(v)) === i).slice(0, 20).map((song, i, arr) => (
-              <SongRow key={song.id || song.saavnId} song={song} index={i} onPlay={handlePlay} contextQueue={arr} />
-            ))}
+        {/* Top Songs Fallback (Trending) */}
+        {!loading && topSongs.length > 0 && (
+          <div className="mb-8">
+            <div className="flex items-center justify-between px-5 mb-4">
+              <h2 className="text-text font-bold text-lg">Top Songs</h2>
+              <button className="text-primary-soft text-xs font-bold" onClick={() => navigate('/search')}>Show all</button>
+            </div>
+            <div className="flex gap-4 px-5 overflow-x-auto scroll-x pb-4">
+              {topSongs.map((song) => (
+                <motion.button
+                  key={song.id || song.saavnId} whileTap={{ scale: 0.95 }}
+                  onClick={() => handlePlay(song, topSongs)}
+                  className="flex flex-col gap-2 w-32 flex-shrink-0"
+                >
+                  <div className="w-32 h-32 rounded-2xl overflow-hidden shadow-md relative group">
+                    <img src={getSongImage(song)} alt={song.name} className="w-full h-full object-cover" />
+                  </div>
+                  <div className="text-left pr-1">
+                    <p className="text-text text-xs font-bold line-clamp-1">{song.name}</p>
+                    <p className="text-muted text-[10px] line-clamp-1">{getArtistsText(song)}</p>
+                  </div>
+                </motion.button>
+              ))}
+            </div>
           </div>
         )}
-        <div className="h-8" />
+        <div className="h-6" />
       </div>
       <MiniPlayer />
     </div>

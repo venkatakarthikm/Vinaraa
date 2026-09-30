@@ -324,7 +324,8 @@ async function getAlbum(id, { page = 0 } = {}) {
   const { value, stale } = await cache.swr('album', { id, page }, env.CACHE_TTL_ENTITY, async () => {
     const { data, upstream } = await saavn.albumById(id);
     const album = Array.isArray(data.data) ? data.data.find((a) => String(a.id) === String(id)) || data.data[0] : data.data;
-    if (album?.songs?.length) await persistSongs(album.songs);
+    const albumSongs = album?.songs || album?.list || [];
+    if (albumSongs.length) await persistSongs(albumSongs);
     if (album) {
       await Entity.updateOne(
         { type: 'album', entityId: String(album.id) },

@@ -179,7 +179,7 @@ router.get(
     const { album, stale } = await catalog.getAlbum(req.params.id);
     if (!album) throw AppError.notFound('Album not found', 'ALBUM_NOT_FOUND');
     const local = await Song.find({ 'album.id': String(album.id || req.params.id) }).lean();
-    const songs = (album.songs || []).map((raw) => {
+    const songs = (album.songs || album.list || []).map((raw) => {
       const normalized = catalog.normalizeSong(raw);
       const hit = local.find((l) => l.saavnId === normalized.saavnId);
       return catalog.toClientSong(hit || normalized);
@@ -191,7 +191,7 @@ router.get(
       language: album.language,
       songCount: album.songCount || songs.length,
       image: catalog.maxQualityImage(album.image || []),
-      artists: (album.artists || []).map((a) => ({ id: a.id, name: catalog.decode(a.name), role: a.role, image: catalog.maxQualityImage(a.image || []) })),
+      artists: (Array.isArray(album.artists) ? album.artists : (album.artists?.all || [])).map((a) => ({ id: a.id, name: catalog.decode(a.name), role: a.role, image: catalog.maxQualityImage(a.image || []) })),
       songs,
       stale,
     });

@@ -95,9 +95,10 @@ export const playlists = {
   addTrack: (id: string, body: { songIds: string[]; source?: string; position?: number }) => apiClient<any>(`/playlists/${id}/tracks`, { method: 'POST', body: JSON.stringify(body) }),
   removeTrack: (id: string, body: { songIds: string[] }) => apiClient<any>(`/playlists/${id}/tracks`, { method: 'DELETE', body: JSON.stringify(body) }),
   reorder: (id: string, body: { from: number; to: number }) => apiClient<any>(`/playlists/${id}/reorder`, { method: 'PATCH', body: JSON.stringify(body) }),
-  saveSong: (body: { songId: string; playlistIds?: string[]; newPlaylistName?: string }) =>
+  saveSong: (body: { songId: string; playlistId?: string; newPlaylistName?: string }) =>
     apiClient<any>('/playlists/save-song', { method: 'POST', body: JSON.stringify(body) }),
   nameSuggestion: () => apiClient<any>('/playlists/name-suggestion'),
+  likedTracks: () => apiClient<any>('/playlists/liked'),
   like: (songId: string, liked?: boolean) =>
     apiClient<any>('/playlists/liked', { method: 'POST', body: JSON.stringify({ songId, ...(liked !== undefined && { liked }) }) }),
   isLiked: (songId: string) => apiClient<any>(`/playlists/liked/${songId}`),

@@ -2,6 +2,7 @@ import { VinaraaPlayer } from '@/native/player';
 import { usePlayerStore } from '@/store/player';
 import { recommendations } from '@/api/endpoints';
 import { formatPlayerSong } from '@/utils/song';
+import { updateMediaSession } from './MediaSessionService';
 
 let started = false;
 let loadedId: string | null = null;
@@ -21,6 +22,7 @@ export function startPlayerEngine() {
         songId: song.id, streamUrl: song.streamUrl!, title: song.name,
         artist: song.artist, artwork: song.image,
       });
+      updateMediaSession();
     } else if (s.isPlaying !== prev.isPlaying && song) {
       s.isPlaying ? VinaraaPlayer.resume() : VinaraaPlayer.pause();
     }

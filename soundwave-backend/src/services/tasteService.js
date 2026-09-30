@@ -152,6 +152,18 @@ async function buildTasteProfile(user, { days = 180, behaviourWeight = 0.65, see
   for (const s of user.preferences?.actors || []) bump(profile.actors, String(s.id), { score: seed, label: s.name, image: s.image });
   for (const s of user.preferences?.favouriteMovies || []) bump(profile.movies, String(s.id), { score: seed, label: s.name, image: s.image });
 
+  // 2.5) Explicit likes signal
+  const likedPlaylist = await require('./playlistService').getSystemPlaylist(user._id, 'liked_songs').catch(() => null);
+  if (likedPlaylist && likedPlaylist.tracks?.length) {
+    const likeWeight = base * 0.2; // Like is worth 20% of a seed
+    for (const track of likedPlaylist.tracks) {
+      if (track.language) bump(profile.languages, track.language, { score: likeWeight, label: track.language });
+      if (track.albumName) bump(profile.movies, track.albumName, { score: likeWeight, label: track.albumName, image: track.image });
+      // We don't have singer/director IDs in track directly, but we do have artistsText
+      // A more robust approach requires Song docs, but we can do our best with album/lang
+    }
+  }
+
   profile.totals = {
     listenedMs: agg.totals.listenedMs || 0,
     plays: agg.totals.plays || 0,
