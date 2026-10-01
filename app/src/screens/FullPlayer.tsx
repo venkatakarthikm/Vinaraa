@@ -10,6 +10,7 @@ import {
 import { springs } from '@/motion';
 import { playlists } from '@/api/endpoints';
 import { VinaraaPlayer } from '@/native/player';
+import { useUIStore } from '@/store/ui';
 
 type PlayerTab = 'photo' | 'lyrics' | 'info';
 
@@ -26,6 +27,7 @@ export default function FullPlayer() {
     setRepeat, setShuffle, setShowPlayer, sessionId, setSessionId, currentSong
   } = usePlayerStore();
   const navigate = useNavigate();
+  const { addToast } = useUIStore();
   const [playerTab, setPlayerTab] = useState<PlayerTab>('photo');
   const [liked, setLiked] = useState(false);
   const [lyrics, setLyrics] = useState<any>(null);
@@ -175,15 +177,17 @@ export default function FullPlayer() {
   const handleAddToPlaylist = async (playlistId?: string) => {
     if (!song) return;
     try {
-      const targetSongId = song.id || song.saavnId;
+      const targetSongId = song.id || song.saavnId || song.songId;
       if (playlistId) {
         await playlists.saveSong({ songId: targetSongId, playlistId });
       } else {
         await playlists.saveSong({ songId: targetSongId, newPlaylistName: suggestedName });
       }
       setShowSaveSheet(false);
-    } catch (e) {
+      addToast('Added to playlist', 'success');
+    } catch (e: any) {
       console.error(e);
+      addToast(e?.message || 'Failed to add to playlist', 'error');
     }
   };
 
@@ -398,9 +402,9 @@ export default function FullPlayer() {
             className="absolute inset-0 z-50 flex flex-col justify-end"
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           >
-            <div className="absolute inset-0 bg-black/60" onClick={() => setShowSaveSheet(false)} />
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowSaveSheet(false)} />
             <motion.div
-              className="bg-surface-2 border-t border-border rounded-t-3xl pb-safe flex flex-col max-h-[70vh]"
+              className="bg-surface-2/90 backdrop-blur-xl border-t border-border/50 rounded-t-3xl pb-safe flex flex-col max-h-[70vh] relative z-10 shadow-[0_-10px_40px_rgba(0,0,0,0.3)]"
               initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
               transition={springs.sheet}
             >
