@@ -33,7 +33,7 @@ export interface VinaraaPlayerPlugin {
   /** Set volume 0.0-1.0 */
   setVolume(options: { volume: number }): Promise<void>;
   /** Add event listener for player events */
-  addListener(eventName: 'playbackStateChanged' | 'songChanged' | 'error', listenerFunc: (event: any) => void): Promise<{ remove: () => void }>;
+  addListener(eventName: 'playbackStateChanged' | 'songChanged' | 'error' | 'nextTrack' | 'previousTrack', listenerFunc: (event: any) => void): Promise<{ remove: () => void }>;
   /** Download song natively */
   download(options: { url: string; title?: string; fileName?: string }): Promise<{ downloadId: number }>;
 }

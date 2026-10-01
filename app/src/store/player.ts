@@ -67,13 +67,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   seekRequestMs: null,
 
   setQueue: (songs, startIndex = 0) => {
-    set({ queue: songs, currentIndex: startIndex, positionMs: 0, history: [] });
+    set({ queue: songs, currentIndex: startIndex, positionMs: 0, history: [], isPlaying: true });
   },
   appendToQueue: (songs) => set((state) => ({ queue: [...state.queue, ...songs] })),
   setPlaying: (isPlaying) => set({ isPlaying }),
   togglePlay: () => set((state) => ({ isPlaying: !state.isPlaying })),
   setPosition: (positionMs) => set({ positionMs }),
-  seekTo: (ms) => set({ seekRequestMs: ms, positionMs: ms }),
+  seekTo: (ms) => set({ seekRequestMs: ms }),
   clearSeek: () => set({ seekRequestMs: null }),
   setDuration: (durationMs) => set({ durationMs }),
   setRepeat: (mode) => {
@@ -85,42 +85,39 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setShuffle: (shuffle) => set({ shuffle }),
   nextTrack: () => {
     const { queue, currentIndex, history, repeat, shuffle } = get();
+    // repeat 'one' is handled by engine directly — skip here
     const currentSong = queue[currentIndex];
     if (currentSong) {
       set({ history: [...history, currentSong] });
     }
-    // Repeat one is handled natively, but if nextTrack is called manually, we should advance
     if (shuffle && queue.length > 1) {
       let nextIndex = Math.floor(Math.random() * queue.length);
       while (nextIndex === currentIndex) nextIndex = Math.floor(Math.random() * queue.length);
-      set({ currentIndex: nextIndex, positionMs: 0 });
+      set({ currentIndex: nextIndex, positionMs: 0, isPlaying: true });
       return;
     }
     if (currentIndex < queue.length - 1) {
-      set({ currentIndex: currentIndex + 1, positionMs: 0 });
+      // Engine subscriber detects index change and calls play() automatically
+      set({ currentIndex: currentIndex + 1, positionMs: 0, isPlaying: true });
+    } else if (repeat === 'all') {
+      // Wrap around — go back to start and play
+      set({ currentIndex: 0, positionMs: 0, isPlaying: true });
     } else {
-      // Loop back to start if at the end of queue, but only play if repeat is 'all'
-      set({ currentIndex: 0, positionMs: 0 });
-      if (repeat === 'all') {
-        import('@/native/player').then(({ VinaraaPlayer }) => VinaraaPlayer.resume().catch(() => {}));
-      } else {
-        set({ isPlaying: false });
-      }
+      // No more songs and no loop
+      set({ isPlaying: false });
     }
   },
   previousTrack: () => {
     const { positionMs, currentIndex, history } = get();
     if (positionMs > 3000) {
+      // Restart current song
       get().seekTo(0);
       return;
     }
-    if (history.length > 0) {
-      const newHistory = [...history];
-      newHistory.pop();
-      set({ history: newHistory, currentIndex: Math.max(0, currentIndex - 1), positionMs: 0 });
-    } else {
-      set({ currentIndex: Math.max(0, currentIndex - 1), positionMs: 0 });
-    }
+    const newIndex = Math.max(0, currentIndex - 1);
+    const newHistory = history.length > 0 ? history.slice(0, -1) : history;
+    // Engine subscriber detects index change and calls play() automatically
+    set({ history: newHistory, currentIndex: newIndex, positionMs: 0, isPlaying: true });
   },
   setShowPlayer: (show) => set({ showPlayer: show }),
   setShowQueue: (show) => set({ showQueue: show }),

@@ -12,23 +12,39 @@ import { notifications } from '@/api/endpoints';
 
 export function setupOneSignal() {
   if (Capacitor.isNativePlatform()) {
-    OneSignal.initialize("c7594dd5-a376-4104-ac20-56abe4f1bf42");
-    OneSignal.Notifications.requestPermission(true).then((success: boolean) => {
-      console.log("Notification permission granted " + success);
-    });
+    try {
+      const os: any =
+        typeof (OneSignal as any)?.initialize === 'function'
+          ? OneSignal
+          : typeof (OneSignal as any)?.default?.initialize === 'function'
+          ? (OneSignal as any).default
+          : (window as any)?.plugins?.OneSignal;
 
-    const registerToken = (token: string) => {
-      if (token) {
-        notifications.registerDevice({ deviceId: token, platform: 'android', provider: 'onesignal' }).catch(console.error);
+      if (!os || typeof os.initialize !== 'function') {
+        console.warn('OneSignal plugin initialization function not found.');
+        return;
       }
-    };
 
-    OneSignal.User.pushSubscription.addEventListener("change", (event: any) => {
-      if (event.current.optedIn) registerToken(event.current.id);
-    });
+      os.initialize("c7594dd5-a376-4104-ac20-56abe4f1bf42");
+      os.Notifications?.requestPermission?.(true)?.then?.((success: boolean) => {
+        console.log("Notification permission granted " + success);
+      });
 
-    const token = OneSignal.User.pushSubscription.id;
-    if (token) registerToken(token);
+      const registerToken = (token: string) => {
+        if (token) {
+          notifications.registerDevice({ deviceId: token, platform: 'android', provider: 'onesignal' }).catch(console.error);
+        }
+      };
+
+      os.User?.pushSubscription?.addEventListener?.("change", (event: any) => {
+        if (event?.current?.optedIn && event?.current?.id) registerToken(event.current.id);
+      });
+
+      const token = os.User?.pushSubscription?.id;
+      if (token) registerToken(token);
+    } catch (err) {
+      console.error("OneSignal setup error:", err);
+    }
   }
 }
 

@@ -8,6 +8,7 @@ let started = false;
 let loadedId: string | null = null;
 let fetchingMore = false;
 let currentSessionId: string | null = null;
+let activeSongIdForTracking: string | null = null;
 let lastHeartbeatMs = 0;
 
 export function startPlayerEngine() {
@@ -15,47 +16,67 @@ export function startPlayerEngine() {
   started = true;
   const st = usePlayerStore;
 
-  // 1) intent -> native
+  // 1) JS store → native player
   st.subscribe(async (s, prev) => {
     const song = s.queue[s.currentIndex];
-    
-    // Check if the song has changed
-    if (song && (song.id !== loadedId || s.queue !== prev.queue && song.id !== loadedId)) {
-      // End previous session if it exists
-      if (currentSessionId && prev.positionMs > 0) {
-        tracking.endSession(currentSessionId, Math.round(prev.positionMs)).catch(() => {});
+
+    // A) New song loaded — always call play() with new URL
+    if (song && song.id !== loadedId) {
+      const oldPosition = prev.positionMs || 0;
+      const targetSongId = song.id;
+      activeSongIdForTracking = targetSongId;
+
+      // End previous session
+      if (currentSessionId && oldPosition > 0) {
+        const oldSession = currentSessionId;
         currentSessionId = null;
+        tracking.endSession(oldSession, Math.round(oldPosition)).catch(() => {});
       }
-      
+
       loadedId = song.id;
       lastHeartbeatMs = 0;
-      console.log(`[Player Engine] Streaming directly from CDN:`, song.streamUrl);
-      
-      // Start new tracking session
-      tracking.startSession((song as any).id || (song as any).saavnId).then((res) => {
-        if (res?.sessionId) currentSessionId = res.sessionId;
+      console.log(`[Player Engine] Loading:`, song.name, song.streamUrl);
+
+      // Start tracking
+      tracking.startSession(targetSongId).then((res) => {
+        if (res?.sessionId && activeSongIdForTracking === targetSongId) {
+          currentSessionId = res.sessionId;
+        }
       }).catch(() => {});
 
+      // Always play the new song — this also handles auto-play after next/prev
       await VinaraaPlayer.play({
-        songId: song.id, streamUrl: song.streamUrl!, title: song.name,
-        artist: song.artist, artwork: song.image,
+        songId: song.id,
+        streamUrl: song.streamUrl!,
+        title: song.name,
+        artist: song.artist,
+        artwork: song.image,
       });
       updateMediaSession();
-    } else if (s.isPlaying !== prev.isPlaying && song) {
-      s.isPlaying ? VinaraaPlayer.resume() : VinaraaPlayer.pause();
+      return;
     }
-    if (s.seekRequestMs != null) {
+
+    // B) Same song, play state toggled
+    if (song && s.isPlaying !== prev.isPlaying) {
+      if (s.isPlaying) {
+        await VinaraaPlayer.resume();
+      } else {
+        await VinaraaPlayer.pause();
+      }
+    }
+
+    // C) Seek requested from JS (in-app progress bar drag)
+    if (s.seekRequestMs != null && s.seekRequestMs !== prev.seekRequestMs) {
       await VinaraaPlayer.seekTo({ positionMs: s.seekRequestMs });
       s.clearSeek();
     }
-    
-    // continuous listening: pre-fetch when 2 tracks remain
+
+    // D) Pre-fetch more tracks when queue is nearly empty
     if (s.queue.length - s.currentIndex <= 2 && !fetchingMore && s.queue.length > 0) {
       fetchingMore = true;
       const cur = s.queue[s.queue.length - 1];
       recommendations.next(cur.id).then(rec => {
         const items = (rec?.items || rec?.songs || []).map(formatPlayerSong);
-        // filter out songs already in the queue
         const newItems = items.filter((item: any) => !usePlayerStore.getState().queue.some(q => q.id === item.id));
         if (newItems.length) {
           usePlayerStore.getState().appendToQueue(newItems);
@@ -64,33 +85,74 @@ export function startPlayerEngine() {
     }
   });
 
-  // 2) native -> store
+  // 2) Native → JS store
   VinaraaPlayer.addListener('playbackStateChanged', async (e: any) => {
-    if (e.type === 'ended') return onEnded();
-    if (typeof e.isPlaying === 'boolean') st.setState({ isPlaying: e.isPlaying });
+    if (e.type === 'ended') {
+      onEnded();
+      return;
+    }
+    // Handle seek from notification/lock screen controls
+    if (e.type === 'seeked' && typeof e.positionMs === 'number') {
+      // Update position without triggering another seek request
+      st.setState({ positionMs: e.positionMs });
+      return;
+    }
+    if (typeof e.isPlaying === 'boolean') {
+      st.setState({ isPlaying: e.isPlaying });
+    }
   });
-  VinaraaPlayer.addListener('error', () => st.setState({ isPlaying: false }));
 
-  // 3) real position/duration (replaces the fake timer)
+  VinaraaPlayer.addListener('error', () => {
+    st.setState({ isPlaying: false });
+    // Try next track on playback error
+    setTimeout(() => {
+      const s = st.getState();
+      if (!s.isPlaying && s.queue.length > s.currentIndex + 1) {
+        s.nextTrack();
+      }
+    }, 1000);
+  });
+
+  // Notification next/prev buttons
+  VinaraaPlayer.addListener('nextTrack', () => {
+    st.getState().nextTrack();
+  });
+  VinaraaPlayer.addListener('previousTrack', () => {
+    st.getState().previousTrack();
+  });
+
+  // 3) Position/duration polling
   setInterval(async () => {
     if (!st.getState().queue.length) return;
     const n = await VinaraaPlayer.getState().catch(() => null);
     if (n) {
-      st.setState({ positionMs: n.positionMs, durationMs: n.durationMs || st.getState().durationMs });
-      
-      // Send heartbeat every 10 seconds
+      st.setState({
+        positionMs: n.positionMs,
+        durationMs: n.durationMs || st.getState().durationMs,
+      });
+
+      // Heartbeat every 10 seconds
       if (currentSessionId && n.positionMs - lastHeartbeatMs >= 10000) {
         lastHeartbeatMs = n.positionMs;
-        tracking.heartbeat(currentSessionId, { 
-          positionMs: Math.round(n.positionMs), 
-          state: st.getState().isPlaying ? 'playing' : 'paused' 
+        tracking.heartbeat(currentSessionId, {
+          positionMs: Math.round(n.positionMs),
+          state: st.getState().isPlaying ? 'playing' : 'paused',
         }).catch(() => {});
       }
     }
   }, 500);
 }
 
-async function onEnded() {
+function onEnded() {
   const s = usePlayerStore.getState();
-  s.nextTrack();
+  const { repeat, currentIndex, queue } = s;
+
+  if (repeat === 'one') {
+    // Replay the same song — clear loadedId to force re-play
+    loadedId = null;
+    s.setQueue(queue, currentIndex);
+    s.setPlaying(true);
+  } else {
+    s.nextTrack();
+  }
 }
