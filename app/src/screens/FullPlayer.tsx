@@ -175,10 +175,11 @@ export default function FullPlayer() {
   const handleAddToPlaylist = async (playlistId?: string) => {
     if (!song) return;
     try {
+      const targetSongId = song.id || song.saavnId;
       if (playlistId) {
-        await playlists.saveSong({ songId: song.id, playlistId });
+        await playlists.saveSong({ songId: targetSongId, playlistId });
       } else {
-        await playlists.saveSong({ songId: song.id, newPlaylistName: suggestedName });
+        await playlists.saveSong({ songId: targetSongId, newPlaylistName: suggestedName });
       }
       setShowSaveSheet(false);
     } catch (e) {
@@ -399,7 +400,7 @@ export default function FullPlayer() {
           >
             <div className="absolute inset-0 bg-black/60" onClick={() => setShowSaveSheet(false)} />
             <motion.div
-              className="bg-surface rounded-t-3xl pb-safe flex flex-col max-h-[70vh]"
+              className="bg-surface-2 border-t border-border rounded-t-3xl pb-safe flex flex-col max-h-[70vh]"
               initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
               transition={springs.sheet}
             >

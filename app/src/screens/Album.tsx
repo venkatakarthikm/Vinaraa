@@ -42,7 +42,7 @@ export default function Album() {
             <ChevronLeft size={22} className="text-white" />
           </button>
         </div>
-        <div className="px-5 -mt-4">
+        <div className="relative z-10 px-5 -mt-4">
           {loading ? (
             <>
               <div className="shimmer h-7 w-48 rounded mb-2" />
