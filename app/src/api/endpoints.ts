@@ -15,8 +15,8 @@ export const auth = {
     device: { deviceId: string; platform: string; model?: string; appVersion?: string };
   }) => apiClient<any>('/auth/login', { method: 'POST', body: JSON.stringify(body) }),
 
-  logout: (refreshToken: string) =>
-    apiClient<any>('/auth/logout', { method: 'POST', body: JSON.stringify({ refreshToken }) }),
+  logout: () =>
+    apiClient<any>('/auth/logout', { method: 'POST' }),
 
   logoutAll: () => apiClient<any>('/auth/logout-all', { method: 'POST' }),
 

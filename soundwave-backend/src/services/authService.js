@@ -109,36 +109,7 @@ async function login({ email, password, device, ip, userAgent }) {
   return { user: publicUser(user), tokens };
 }
 
-async function refresh({ refreshToken, ip, userAgent, deviceId }) {
-  const rotated = await tokenService.rotateRefreshToken(refreshToken, { ip, userAgent, deviceId });
-  const user = await User.findById(rotated.userId);
-  if (!user) throw AppError.unauthorized('Account no longer exists', 'USER_NOT_FOUND');
-  if (user.status !== 'active') throw AppError.forbidden('Account is not active', 'ACCOUNT_INACTIVE');
-  if (deviceId) {
-    user.touchDevice({ deviceId });
-    await user.save();
-  }
-  return {
-    user: publicUser(user),
-    tokens: {
-      accessToken: tokenService.signAccessToken(user),
-      refreshToken: rotated.raw,
-      tokenType: 'Bearer',
-      expiresIn: Math.floor(tokenService.accessTokenExpiresInMs() / 1000),
-      refreshExpiresAt: rotated.doc.expiresAt,
-    },
-  };
-}
 
-async function logout({ userId, refreshToken, allDevices = false }) {
-  if (allDevices) {
-    await tokenService.revokeAllForUser(userId, 'logout_all');
-    await User.updateOne({ _id: userId }, { $inc: { 'security.tokenVersion': 1 } });
-    return { revoked: 'all' };
-  }
-  await tokenService.revokeRefreshToken(refreshToken, 'logout');
-  return { revoked: 'one' };
-}
 
 async function changePassword(userId, { currentPassword, newPassword }) {
   const user = await User.findById(userId).select('+passwordHash');
@@ -207,8 +178,6 @@ async function sessions(userId) {
 module.exports = {
   register,
   login,
-  refresh,
-  logout,
   changePassword,
   forgotPassword,
   resetPassword,

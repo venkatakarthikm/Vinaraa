@@ -29,26 +29,7 @@ router.post(
   })
 );
 
-router.post(
-  '/refresh',
-  authLimiter,
-  validate(require('../validators/schemas').refreshSchema),
-  asyncHandler(async (req, res) => {
-    const result = await authService.refresh({ ...req.body, ip: req.ip, userAgent: req.headers['user-agent'] });
-    return ok(res, result);
-  })
-);
 
-/** Revokes the presented refresh token only (single-device logout). */
-router.post(
-  '/logout',
-  asyncHandler(async (req, res) => {
-    const refreshToken = req.body?.refreshToken;
-    if (req.user) await authService.logout({ userId: req.user._id, refreshToken });
-    else if (refreshToken) await tokenService.revokeRefreshToken(refreshToken, 'logout');
-    return ok(res, { loggedOut: true });
-  })
-);
 
 /** Revokes every session and bumps tokenVersion (all-device logout). */
 router.post(

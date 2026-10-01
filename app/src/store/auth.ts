@@ -6,7 +6,7 @@ import { Preferences } from '@capacitor/preferences';
 interface AuthState {
   isAuthenticated: boolean;
   user: any | null;
-  login: (user: any, tokens: { accessToken: string; refreshToken: string }) => Promise<void>;
+  login: (user: any, tokens: { accessToken: string }) => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
   updateUser: (user: any) => void;
@@ -17,24 +17,18 @@ export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   login: async (user, tokens) => {
     try {
-      await VinaraaPlayer.setAuth({ accessToken: tokens.accessToken, refreshToken: tokens.refreshToken });
-      await Preferences.set({ key: 'vinaraa_refresh_token', value: tokens.refreshToken });
+      await VinaraaPlayer.setAuth({ accessToken: tokens.accessToken, refreshToken: '' });
     } catch (_e) {
       console.warn('VinaraaPlayer native plugin not available', _e);
       localStorage.setItem('mockAccessToken', tokens.accessToken);
-      localStorage.setItem('mockRefreshToken', tokens.refreshToken);
-      localStorage.setItem('vinaraa_refresh_token', tokens.refreshToken);
     }
     set({ isAuthenticated: true, user });
   },
   logout: async () => {
     try {
       await VinaraaPlayer.setAuth({ accessToken: '', refreshToken: '' });
-      await Preferences.remove({ key: 'vinaraa_refresh_token' });
     } catch (_e) {
       localStorage.removeItem('mockAccessToken');
-      localStorage.removeItem('mockRefreshToken');
-      localStorage.removeItem('vinaraa_refresh_token');
     }
     set({ isAuthenticated: false, user: null });
   },

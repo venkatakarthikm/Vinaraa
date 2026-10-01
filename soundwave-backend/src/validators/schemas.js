@@ -45,12 +45,7 @@ const loginSchema = z.object({
   }),
 });
 
-const refreshSchema = z.object({
-  body: z.object({
-    refreshToken: z.string().min(20),
-    deviceId: z.string().max(120).optional(),
-  }),
-});
+
 
 const changePasswordSchema = z.object({
   body: z.object({
@@ -318,7 +313,6 @@ module.exports = {
   deviceSchema,
   registerSchema,
   loginSchema,
-  refreshSchema,
   changePasswordSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
