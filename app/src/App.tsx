@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { App as CapacitorApp } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
 import { ToastContainer } from '@/components/Toast';
 import Navigator from '@/navigation/Navigator';
 import { useNavigate as _useNavigate, useLocation } from 'react-router-dom';
@@ -10,7 +11,7 @@ import OneSignal from 'onesignal-cordova-plugin';
 import { notifications } from '@/api/endpoints';
 
 export function setupOneSignal() {
-  if (typeof window !== 'undefined' && (window as any).cordova) {
+  if (Capacitor.isNativePlatform()) {
     OneSignal.initialize("c7594dd5-a376-4104-ac20-56abe4f1bf42");
     OneSignal.Notifications.requestPermission(true).then((success: boolean) => {
       console.log("Notification permission granted " + success);
