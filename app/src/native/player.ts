@@ -5,9 +5,15 @@ export interface VinaraaPlayerPlugin {
   /** Set auth tokens (called after login/refresh) */
   setAuth(options: { accessToken: string; refreshToken: string }): Promise<void>;
   /** Get current access token */
-  getAccessToken(): Promise<{ token: string | null }>;
+  getAccessToken(): Promise<{ token: string | null; refreshToken?: string | null }>;
   /** Start playing a stream URL */
   play(options: { songId: string; streamUrl: string; title: string; artist: string; artwork?: string }): Promise<void>;
+  /** Set full queue natively in ExoPlayer */
+  setQueue(options: {
+    items: { songId: string; streamUrl: string; title: string; artist: string; artwork?: string }[];
+    startIndex: number;
+    repeatMode: string;
+  }): Promise<void>;
   /** Pause playback */
   pause(): Promise<void>;
   /** Resume playback */

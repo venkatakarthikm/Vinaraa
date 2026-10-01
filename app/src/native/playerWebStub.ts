@@ -16,8 +16,8 @@ export class VinaraaPlayerWebStub extends WebPlugin implements VinaraaPlayerPlug
     else localStorage.removeItem(REFRESH_TOKEN_KEY);
   }
 
-  async getAccessToken(): Promise<{ token: string | null }> {
-    return { token: localStorage.getItem(ACCESS_TOKEN_KEY) };
+  async getAccessToken(): Promise<{ token: string | null; refreshToken?: string | null }> {
+    return { token: localStorage.getItem(ACCESS_TOKEN_KEY), refreshToken: localStorage.getItem(REFRESH_TOKEN_KEY) };
   }
 
   async play({ songId, streamUrl, title: _title, artist: _artist }: { songId: string; streamUrl: string; title: string; artist: string; artwork?: string }): Promise<void> {
@@ -35,6 +35,13 @@ export class VinaraaPlayerWebStub extends WebPlugin implements VinaraaPlayerPlug
       console.warn('[VinaraaPlayer Web] Could not autoplay:', err.message);
     });
     this.notifyListeners('playbackStateChanged', { isPlaying: true, songId });
+  }
+
+  async setQueue({ items, startIndex }: { items: { songId: string; streamUrl: string; title: string; artist: string; artwork?: string }[]; startIndex: number; repeatMode: string }): Promise<void> {
+    const item = items[startIndex];
+    if (item) {
+      await this.play(item);
+    }
   }
 
   async pause(): Promise<void> {

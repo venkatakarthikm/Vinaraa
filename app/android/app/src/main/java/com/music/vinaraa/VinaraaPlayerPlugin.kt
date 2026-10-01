@@ -1,20 +1,21 @@
 package com.music.vinaraa
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.SharedPreferences
+import android.net.Uri
+import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
+import androidx.media3.session.MediaController
+import androidx.media3.session.SessionToken
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
-import androidx.media3.session.MediaController
-import androidx.media3.session.SessionToken
-import android.content.ComponentName
-import androidx.core.content.ContextCompat
 import com.google.common.util.concurrent.ListenableFuture
-import androidx.media3.common.MediaMetadata
 
 @CapacitorPlugin(name = "VinaraaPlayer")
 class VinaraaPlayerPlugin : Plugin() {
@@ -24,8 +25,10 @@ class VinaraaPlayerPlugin : Plugin() {
     private var prefs: SharedPreferences? = null
     private val PREFS_NAME = "vinaraa_auth"
 
-    // True while a JS-initiated seekTo() is being executed — suppresses echoing it back to JS
     private var isSeeking = false
+
+    private fun prefs(): SharedPreferences =
+        prefs ?: context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).also { prefs = it }
 
     private val mediaReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: android.content.Intent?) {
@@ -77,13 +80,23 @@ class VinaraaPlayerPlugin : Plugin() {
                             }
                         }
 
+                        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                            activity?.runOnUiThread {
+                                val idx = player?.currentMediaItemIndex ?: 0
+                                val ret = JSObject().apply {
+                                    put("songId", mediaItem?.mediaId)
+                                    put("index", idx)
+                                    put("isPlaying", player?.isPlaying ?: false)
+                                }
+                                notifyListeners("songChanged", ret)
+                            }
+                        }
+
                         override fun onPositionDiscontinuity(
                             oldPosition: Player.PositionInfo,
                             newPosition: Player.PositionInfo,
                             reason: Int
                         ) {
-                            // Only notify JS when seek came from the notification/lock-screen,
-                            // NOT from our own JS-initiated seekTo() call.
                             if (reason == Player.DISCONTINUITY_REASON_SEEK && !isSeeking) {
                                 val seekMs = newPosition.positionMs
                                 activity?.runOnUiThread {
@@ -104,14 +117,13 @@ class VinaraaPlayerPlugin : Plugin() {
                         }
                     })
                 } catch (e: Exception) {
-                    // Controller not ready yet — will retry via withPlayer
+                    // Controller not ready yet
                 }
             },
             ContextCompat.getMainExecutor(context)
         )
     }
 
-    // All Media3 calls MUST run on the main thread — withPlayer guarantees this.
     private fun withPlayer(action: (Player) -> Unit) {
         val p = player
         if (p != null) {
@@ -119,12 +131,10 @@ class VinaraaPlayerPlugin : Plugin() {
                 try {
                     action(p)
                 } catch (e: Exception) {
-                    // If action fails (e.g. controller disconnected), re-init
                     initPlayer()
                 }
             }
         } else {
-            // Controller not connected yet — re-init if needed, then queue action
             if (controllerFuture == null || controllerFuture?.isDone == true) {
                 initPlayer()
             }
@@ -147,27 +157,67 @@ class VinaraaPlayerPlugin : Plugin() {
     fun setAuth(call: PluginCall) {
         val accessToken = call.getString("accessToken", "")
         val refreshToken = call.getString("refreshToken", "")
-        prefs?.edit()
-            ?.putString("access_token", accessToken)
-            ?.putString("refresh_token", refreshToken)
-            ?.apply()
+        prefs().edit()
+            .putString("access_token", accessToken)
+            .putString("refresh_token", refreshToken)
+            .apply()
         call.resolve()
     }
 
     @PluginMethod
     fun getAccessToken(call: PluginCall) {
-        val token = prefs?.getString("access_token", null)
-        val ret = JSObject()
-        ret.put("token", token)
+        val token = prefs().getString("access_token", null)
+        val refreshToken = prefs().getString("refresh_token", null)
+        val ret = JSObject().apply {
+            put("token", token)
+            put("refreshToken", refreshToken)
+        }
         call.resolve(ret)
     }
 
     @PluginMethod
-    fun play(call: PluginCall) {
-        val streamUrl = call.getString("streamUrl") ?: run {
-            call.reject("streamUrl is required")
-            return
+    fun setQueue(call: PluginCall) {
+        val itemsArr = call.getArray("items") ?: return call.reject("items required")
+        val startIndex = call.getInt("startIndex", 0) ?: 0
+        val repeatMode = call.getString("repeatMode", "off") ?: "off"
+        val built = ArrayList<MediaItem>()
+        for (i in 0 until itemsArr.length()) {
+            val o = itemsArr.getJSONObject(i)
+            val url = o.optString("streamUrl", "")
+            if (url.isEmpty()) continue
+            built.add(
+                MediaItem.Builder()
+                    .setUri(url)
+                    .setMediaId(o.optString("songId", ""))
+                    .setMediaMetadata(
+                        MediaMetadata.Builder()
+                            .setTitle(o.optString("title", ""))
+                            .setArtist(o.optString("artist", ""))
+                            .setArtworkUri(o.optString("artwork", "").takeIf { it.isNotEmpty() }?.let(Uri::parse))
+                            .build()
+                    )
+                    .build()
+            )
         }
+        if (built.isEmpty()) return call.reject("no playable items")
+        withPlayer { p ->
+            p.repeatMode = when (repeatMode) {
+                "one" -> Player.REPEAT_MODE_ONE
+                "all" -> Player.REPEAT_MODE_ALL
+                else -> Player.REPEAT_MODE_OFF
+            }
+            p.setMediaItems(built, startIndex.coerceIn(0, built.size - 1), 0L)
+            p.prepare()
+            p.play()
+        }
+        call.resolve()
+    }
+
+    @PluginMethod
+    fun play(call: PluginCall) {
+        val streamUrl = call.getString("streamUrl")?.takeIf { it.isNotBlank() }
+            ?: return call.reject("streamUrl is required")
+
         val title = call.getString("title")
         val artist = call.getString("artist")
         val artwork = call.getString("artwork")
@@ -176,7 +226,7 @@ class VinaraaPlayerPlugin : Plugin() {
             val metadata = MediaMetadata.Builder()
                 .setTitle(title)
                 .setArtist(artist)
-                .setArtworkUri(if (artwork != null) android.net.Uri.parse(artwork) else null)
+                .setArtworkUri(if (artwork != null) Uri.parse(artwork) else null)
                 .build()
 
             val mediaItem = MediaItem.Builder()
@@ -200,7 +250,6 @@ class VinaraaPlayerPlugin : Plugin() {
     @PluginMethod
     fun resume(call: PluginCall) {
         withPlayer { p ->
-            // After STATE_ENDED, ExoPlayer needs prepare() before play()
             if (p.playbackState == Player.STATE_IDLE || p.playbackState == Player.STATE_ENDED) {
                 p.prepare()
             }
@@ -217,16 +266,17 @@ class VinaraaPlayerPlugin : Plugin() {
 
     @PluginMethod
     fun seekTo(call: PluginCall) {
-        val positionMs = call.getLong("positionMs", 0L) ?: 0L
+        val positionMs = call.getLong("positionMs")
+            ?: call.getDouble("positionMs")?.toLong()
+            ?: call.getInt("positionMs")?.toLong()
+            ?: 0L
         withPlayer { p ->
-            // Mark as JS-initiated seek so onPositionDiscontinuity doesn't echo it back
             isSeeking = true
             if (p.playbackState == Player.STATE_IDLE || p.playbackState == Player.STATE_ENDED) {
                 p.prepare()
             }
             p.seekTo(positionMs)
-            // Reset flag after a short delay (after the discontinuity event fires)
-            activity?.window?.decorView?.postDelayed({ isSeeking = false }, 300)
+            activity?.window?.decorView?.postDelayed({ isSeeking = false }, 500)
         }
         call.resolve()
     }
@@ -252,16 +302,17 @@ class VinaraaPlayerPlugin : Plugin() {
                 val ret = JSObject()
                 ret.put("isPlaying", p.isPlaying)
                 ret.put("positionMs", p.currentPosition)
-                ret.put("durationMs", p.duration.coerceAtLeast(0L))
+                val d = p.duration
+                ret.put("durationMs", if (d == androidx.media3.common.C.TIME_UNSET || d <= 0L) -1L else d)
                 ret.put("bufferedMs", p.bufferedPosition)
-                ret.put("songId", null as String?)
+                ret.put("songId", p.currentMediaItem?.mediaId)
                 call.resolve(ret)
             }
         } else {
             val ret = JSObject()
             ret.put("isPlaying", false)
             ret.put("positionMs", 0L)
-            ret.put("durationMs", 0L)
+            ret.put("durationMs", -1L)
             ret.put("bufferedMs", 0L)
             ret.put("songId", null as String?)
             call.resolve(ret)
@@ -270,13 +321,19 @@ class VinaraaPlayerPlugin : Plugin() {
 
     @PluginMethod
     fun next(call: PluginCall) {
-        withPlayer { p -> p.seekToNextMediaItem() }
+        withPlayer { p ->
+            p.seekToNextMediaItem()
+            p.play()
+        }
         call.resolve()
     }
 
     @PluginMethod
     fun previous(call: PluginCall) {
-        withPlayer { p -> p.seekToPreviousMediaItem() }
+        withPlayer { p ->
+            p.seekToPreviousMediaItem()
+            p.play()
+        }
         call.resolve()
     }
 
@@ -294,7 +351,7 @@ class VinaraaPlayerPlugin : Plugin() {
         val fileName = call.getString("fileName") ?: "download.mp3"
 
         try {
-            val request = android.app.DownloadManager.Request(android.net.Uri.parse(url))
+            val request = android.app.DownloadManager.Request(Uri.parse(url))
                 .setTitle(title)
                 .setDescription("Downloading...")
                 .setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)

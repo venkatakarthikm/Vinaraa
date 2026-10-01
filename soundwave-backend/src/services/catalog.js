@@ -362,9 +362,9 @@ async function getArtist(id, { page = 0 } = {}) {
   return { ...value, stale: Boolean(stale) };
 }
 
-async function getPlaylist(id, { page = 0 } = {}) {
-  const { value, stale } = await cache.swr('playlist', { id, page }, env.CACHE_TTL_ENTITY, async () => {
-    const { data, upstream } = await saavn.playlistById(id, page);
+async function getPlaylist(id, { limit = 100 } = {}) {
+  const { value, stale } = await cache.swr('playlist', { id, limit }, env.CACHE_TTL_ENTITY, async () => {
+    const { data, upstream } = await saavn.playlistById(id, limit);
     const pl = data.data;
     if (pl?.songs?.length) await persistSongs(pl.songs);
     return { playlist: pl, upstream };

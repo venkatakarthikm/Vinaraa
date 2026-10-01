@@ -13,17 +13,24 @@ export function getArtistsText(song: any) {
 }
 
 export function formatPlayerSong(song: any) {
+  const songId = song?.songId || song?.id || song?.saavnId || song?._id;
+  const directUrl =
+    song?.audio?.best ||
+    (Array.isArray(song?.audio?.formats) && song.audio.formats[song.audio.formats.length - 1]?.url) ||
+    (Array.isArray(song?.downloadUrl) && song.downloadUrl[song.downloadUrl.length - 1]?.url) ||
+    '';
+
   return {
-    id: song?.songId || song?.id || song?.saavnId || song?._id,
-    name: song?.name || 'Unknown Song',
+    id: songId,
+    name: song?.name || song?.title || 'Unknown Song',
     artist: getArtistsText(song),
     image: getSongImage(song),
     durationMs: song?.durationMs || (song?.duration ? song.duration * 1000 : 0),
     album: song?.album?.name || song?.album,
     albumId: song?.album?.id || song?.albumId,
     language: song?.language,
-    streamUrl: song?.audio?.best || '',
-    formats: song?.audio?.formats || [],
+    streamUrl: directUrl,
+    formats: song?.audio?.formats || song?.downloadUrl || [],
     singers: song?.singers || [],
     musicDirectors: song?.musicDirectors || [],
     actors: song?.actors || [],

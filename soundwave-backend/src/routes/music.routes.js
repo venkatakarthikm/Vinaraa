@@ -242,7 +242,8 @@ router.get(
 router.get(
   '/editorial/playlists/:id',
   asyncHandler(async (req, res) => {
-    const { playlist, stale } = await catalog.getPlaylist(req.params.id);
+    const limit = Math.min(Number(req.query.limit) || 100, 200);
+    const { playlist, stale } = await catalog.getPlaylist(req.params.id, { limit });
     if (!playlist) throw AppError.notFound('Playlist not found', 'PLAYLIST_NOT_FOUND');
     const songs = await Song.find({ saavnId: { $in: (playlist.songs || []).map((x) => String(x.id)) } }).lean();
     const map = new Map(songs.map((x) => [x.saavnId, x]));

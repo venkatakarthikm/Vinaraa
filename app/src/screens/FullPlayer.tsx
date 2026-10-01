@@ -108,16 +108,27 @@ export default function FullPlayer() {
     }
   }, [positionMs, playerTab, lyrics]);
 
-  const progress = durationMs ? (seeking ? seekValue : positionMs / durationMs) : 0;
+  const seekValRef = useRef(0);
+  const effectiveDuration = durationMs > 0 ? durationMs : (song?.durationMs || 0);
+  const progress = effectiveDuration ? (seeking ? seekValue : positionMs / effectiveDuration) : 0;
 
   const handleSeekChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = Number(e.target.value);
+    seekValRef.current = val;
     setSeeking(true);
-    setSeekValue(Number(e.target.value));
+    setSeekValue(val);
   };
 
-  const handleSeekCommit = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newPos = Number(e.target.value) * (durationMs || 0);
+  const commitSeek = () => {
+    if (!effectiveDuration || effectiveDuration <= 0) {
+      setSeeking(false);
+      return;
+    }
+    const targetFraction = seekValRef.current;
+    const newPos = Math.round(Math.max(0, Math.min(effectiveDuration - 500, targetFraction * effectiveDuration)));
+    console.log('[FullPlayer Seek] Seeking to:', newPos, 'ms');
     seekTo(newPos);
+    usePlayerStore.setState({ positionMs: newPos });
     setSeeking(false);
   };
 
@@ -342,16 +353,23 @@ export default function FullPlayer() {
         <input
           type="range" min={0} max={1} step={0.001}
           value={seeking ? seekValue : progress}
+          onPointerDown={(e) => {
+            const val = Number((e.target as HTMLInputElement).value);
+            seekValRef.current = val;
+            setSeeking(true);
+            setSeekValue(val);
+          }}
           onChange={handleSeekChange}
-          onMouseUp={handleSeekCommit as any}
-          onTouchEnd={handleSeekCommit as any}
+          onPointerUp={commitSeek}
+          onTouchEnd={commitSeek}
+          disabled={!effectiveDuration}
           className="w-full h-1.5 appearance-none rounded-full outline-none cursor-pointer bg-surface-2"
           style={{ backgroundImage: `linear-gradient(to right, #8B3DFF ${progress * 100}%, transparent ${progress * 100}%)` }}
           aria-label="Seek"
         />
         <div className="flex justify-between mt-2">
           <span className="text-muted text-xs font-medium tracking-wide">{formatTime(positionMs)}</span>
-          <span className="text-muted text-xs font-medium tracking-wide">{formatTime(durationMs)}</span>
+          <span className="text-muted text-xs font-medium tracking-wide">{formatTime(effectiveDuration)}</span>
         </div>
       </div>
 

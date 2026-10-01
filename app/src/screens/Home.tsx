@@ -132,7 +132,7 @@ export default function Home() {
     try {
       const [feedData, trendingData] = await Promise.allSettled([
         recommendations.feed(),
-        music.trending(),
+        music.trending('telugu'),
       ]);
       if (feedData.status === 'fulfilled') setFeed(feedData.value?.rails || []);
       if (trendingData.status === 'fulfilled') setTrending(trendingData.value?.items || []);
@@ -153,7 +153,14 @@ export default function Home() {
     navigate(`/player/${queue[startIndex >= 0 ? startIndex : 0].id}`, { state: { song } });
   };
 
-  // Curated prominent entities for the UI
+  // Curated prominent entities for Telugu & Global Music Lovers
+  const FEATURED_PLAYLISTS = [
+    { id: '2574962', name: 'Adhire Hits', type: 'playlist', subtitle: 'Telugu Blockbuster Hits', image: 'https://c.saavncdn.com/editorial/AdhireHits_20230323062000_500x500.jpg' },
+    { id: '1134643225', name: 'Telugu Superhits', type: 'playlist', subtitle: 'Top 50 Telugu Tracks', image: 'https://c.saavncdn.com/editorial/IndiaSuperhitsTop50Telugu_20230323062111_500x500.jpg' },
+    { id: '47599074', name: 'Now Trending', type: 'playlist', subtitle: 'Viral Chartbusters', image: 'https://c.saavncdn.com/editorial/NowTrending_20260423085344.jpg' },
+    { id: '110858205', name: 'Trending Today', type: 'playlist', subtitle: 'Today’s Hot Pick', image: 'https://c.saavncdn.com/editorial/TrendingToday_20230323062222_500x500.jpg' },
+  ];
+
   const MUSIC_DIRECTORS = [
     { id: '455663', name: 'Anirudh', image: 'https://c.saavncdn.com/artists/Anirudh_Ravichander_004_20230323061611_500x500.jpg' },
     { id: '455130', name: 'Thaman S', image: 'https://c.saavncdn.com/artists/S._Thaman_002_20231019124439_500x500.jpg' },
@@ -216,6 +223,19 @@ export default function Home() {
             </div>
           </div>
         )}
+
+        {/* Featured Playlists */}
+        <div className="mb-10">
+          <div className="flex items-center justify-between px-5 mb-4">
+            <h2 className="text-text font-black text-xl">Hot Playlists</h2>
+            <ChevronRight size={22} className="text-muted" />
+          </div>
+          <div className="flex gap-4 px-5 overflow-x-auto scroll-x pb-4">
+            {FEATURED_PLAYLISTS.map((pl) => (
+              <AlbumSquare key={pl.id} item={pl} onClick={() => navigate(`/playlist/${pl.id}`)} />
+            ))}
+          </div>
+        </div>
 
         {/* Music Directors */}
         <div className="mb-10">

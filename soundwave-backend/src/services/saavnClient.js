@@ -134,7 +134,7 @@ async function songsByIds(ids = []) {
 
 const albumById = (id) => request(`/albums${qs({ id })}`);
 const artistById = (id, page = 0) => request(`/artists${qs({ id, page })}`);
-const playlistById = (id, page = 0) => request(`/playlists${qs({ id, page })}`);
+const playlistById = (id, limit = 100) => request(`/playlists${qs({ id, limit })}`);
 const songLyrics = (id) => request(`/songs/${encodeURIComponent(id)}/lyrics`);
 const modules = (language) => request(`/modules${qs({ language })}`);
 

@@ -75,7 +75,7 @@ export const music = {
   similar: (id: string) => apiClient<any>(`/music/songs/${id}/similar`),
   album: (id: string) => apiClient<any>(`/music/albums/${id}`),
   artist: (id: string) => apiClient<any>(`/music/artists/${id}`),
-  editorialPlaylist: (id: string) => apiClient<any>(`/music/editorial/playlists/${id}`),
+  editorialPlaylist: (id: string, limit: number = 100) => apiClient<any>(`/music/editorial/playlists/${id}?limit=${limit}`),
   modules: (languages?: string) => apiClient<any>(`/music/modules${languages ? `?languages=${languages}` : ''}`),
   trending: (language?: string) => apiClient<any>(`/music/trending${language ? `?language=${language}` : ''}`),
   languages: () => apiClient<any>('/music/languages'),

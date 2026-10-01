@@ -10,6 +10,7 @@ let fetchingMore = false;
 let currentSessionId: string | null = null;
 let activeSongIdForTracking: string | null = null;
 let lastHeartbeatMs = 0;
+let lastQueueLength = 0;
 
 export function startPlayerEngine() {
   if (started) return;
@@ -20,13 +21,12 @@ export function startPlayerEngine() {
   st.subscribe(async (s, prev) => {
     const song = s.queue[s.currentIndex];
 
-    // A) New song loaded — always call play() with new URL
-    if (song && song.id !== loadedId) {
+    // A) Queue or current song changed
+    if (song && (song.id !== loadedId || s.queue.length !== lastQueueLength)) {
       const oldPosition = prev.positionMs || 0;
       const targetSongId = song.id;
       activeSongIdForTracking = targetSongId;
 
-      // End previous session
       if (currentSessionId && oldPosition > 0) {
         const oldSession = currentSessionId;
         currentSessionId = null;
@@ -34,44 +34,56 @@ export function startPlayerEngine() {
       }
 
       loadedId = song.id;
+      lastQueueLength = s.queue.length;
       lastHeartbeatMs = 0;
-      console.log(`[Player Engine] Loading:`, song.name, song.streamUrl);
+      console.log(`[Player Engine] Syncing queue to native:`, song.name, song.streamUrl);
 
-      // Start tracking
       tracking.startSession(targetSongId).then((res) => {
         if (res?.sessionId && activeSongIdForTracking === targetSongId) {
           currentSessionId = res.sessionId;
         }
       }).catch(() => {});
 
-      // Always play the new song — this also handles auto-play after next/prev
-      await VinaraaPlayer.play({
-        songId: song.id,
-        streamUrl: song.streamUrl!,
-        title: song.name,
-        artist: song.artist,
-        artwork: song.image,
+      await VinaraaPlayer.setQueue({
+        items: s.queue.map((q) => ({
+          songId: q.id,
+          streamUrl: q.streamUrl!,
+          title: q.name,
+          artist: q.artist,
+          artwork: q.image,
+        })),
+        startIndex: s.currentIndex,
+        repeatMode: s.repeat,
+      }).catch(() => {
+        // Fallback to single play if setQueue fails
+        VinaraaPlayer.play({
+          songId: song.id,
+          streamUrl: song.streamUrl!,
+          title: song.name,
+          artist: song.artist,
+          artwork: song.image,
+        });
       });
       updateMediaSession();
       return;
     }
 
-    // B) Same song, play state toggled
-    if (song && s.isPlaying !== prev.isPlaying) {
-      if (s.isPlaying) {
+    // B) Play state toggled
+    if (song && s.desiredPlaying !== prev.desiredPlaying) {
+      if (s.desiredPlaying) {
         await VinaraaPlayer.resume();
       } else {
         await VinaraaPlayer.pause();
       }
     }
 
-    // C) Seek requested from JS (in-app progress bar drag)
+    // C) Seek requested
     if (s.seekRequestMs != null && s.seekRequestMs !== prev.seekRequestMs) {
       await VinaraaPlayer.seekTo({ positionMs: s.seekRequestMs });
       s.clearSeek();
     }
 
-    // D) Pre-fetch more tracks when queue is nearly empty
+    // D) Pre-fetch when near end of queue
     if (s.queue.length - s.currentIndex <= 2 && !fetchingMore && s.queue.length > 0) {
       fetchingMore = true;
       const cur = s.queue[s.queue.length - 1];
@@ -86,14 +98,21 @@ export function startPlayerEngine() {
   });
 
   // 2) Native → JS store
+  VinaraaPlayer.addListener('songChanged', (e: any) => {
+    if (typeof e.index === 'number' && e.index >= 0) {
+      const s = st.getState();
+      if (s.currentIndex !== e.index) {
+        st.setState({ currentIndex: e.index, isPlaying: e.isPlaying ?? true });
+      }
+    }
+  });
+
   VinaraaPlayer.addListener('playbackStateChanged', async (e: any) => {
     if (e.type === 'ended') {
       onEnded();
       return;
     }
-    // Handle seek from notification/lock screen controls
     if (e.type === 'seeked' && typeof e.positionMs === 'number') {
-      // Update position without triggering another seek request
       st.setState({ positionMs: e.positionMs });
       return;
     }
@@ -103,8 +122,7 @@ export function startPlayerEngine() {
   });
 
   VinaraaPlayer.addListener('error', () => {
-    st.setState({ isPlaying: false });
-    // Try next track on playback error
+    st.setState({ isPlaying: false, desiredPlaying: false });
     setTimeout(() => {
       const s = st.getState();
       if (!s.isPlaying && s.queue.length > s.currentIndex + 1) {
@@ -113,7 +131,6 @@ export function startPlayerEngine() {
     }, 1000);
   });
 
-  // Notification next/prev buttons
   VinaraaPlayer.addListener('nextTrack', () => {
     st.getState().nextTrack();
   });
@@ -121,17 +138,19 @@ export function startPlayerEngine() {
     st.getState().previousTrack();
   });
 
-  // 3) Position/duration polling
+  // 3) Polling
   setInterval(async () => {
     if (!st.getState().queue.length) return;
     const n = await VinaraaPlayer.getState().catch(() => null);
     if (n) {
-      st.setState({
-        positionMs: n.positionMs,
-        durationMs: n.durationMs || st.getState().durationMs,
-      });
+      const nativeDur = n.durationMs;
+      if (st.getState().seekRequestMs == null) {
+        st.setState({
+          positionMs: n.positionMs,
+          durationMs: nativeDur && nativeDur > 0 ? nativeDur : st.getState().durationMs,
+        });
+      }
 
-      // Heartbeat every 10 seconds
       if (currentSessionId && n.positionMs - lastHeartbeatMs >= 10000) {
         lastHeartbeatMs = n.positionMs;
         tracking.heartbeat(currentSessionId, {
@@ -145,29 +164,5 @@ export function startPlayerEngine() {
 
 function onEnded() {
   const s = usePlayerStore.getState();
-  const { repeat, queue } = s;
-
-  if (repeat === 'one') {
-    // For repeat-one: seek back to 0 and resume — do NOT call setQueue (it resets history)
-    // Directly seek on native player and update store position
-    VinaraaPlayer.seekTo({ positionMs: 0 })
-      .then(() => VinaraaPlayer.resume())
-      .catch(() => {});
-    usePlayerStore.setState({ positionMs: 0, isPlaying: true });
-    return;
-  }
-
-  // For normal next / repeat-all
-  if (queue.length === 1) {
-    // Edge case: only 1 song in queue — nextTrack() won't change the index or song ID,
-    // so the engine subscriber won't detect a change. Force re-play by clearing loadedId.
-    loadedId = null;
-    usePlayerStore.setState({ positionMs: 0, isPlaying: true });
-    // ↑ This triggers subscriber: song.id !== loadedId(null) → calls VinaraaPlayer.play()
-    return;
-  }
-
-  // Normal multi-song case — nextTrack() changes the index, subscriber detects new song ID
   s.nextTrack();
 }
-

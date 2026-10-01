@@ -25,6 +25,7 @@ interface PlayerState {
   history: Song[];
   currentIndex: number;
   isPlaying: boolean;
+  desiredPlaying: boolean;
   positionMs: number;
   durationMs: number;
   repeat: RepeatMode;
@@ -42,6 +43,7 @@ interface PlayerState {
   seekTo: (ms: number) => void;
   clearSeek: () => void;
   setDuration: (durationMs: number) => void;
+  setDurationFromSong: (ms: number) => void;
   setRepeat: (mode: RepeatMode) => void;
   setShuffle: (shuffle: boolean) => void;
   nextTrack: () => void;
@@ -57,6 +59,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   history: [],
   currentIndex: 0,
   isPlaying: false,
+  desiredPlaying: false,
   positionMs: 0,
   durationMs: 0,
   repeat: 'all',
@@ -67,15 +70,27 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   seekRequestMs: null,
 
   setQueue: (songs, startIndex = 0) => {
-    set({ queue: songs, currentIndex: startIndex, positionMs: 0, history: [], isPlaying: true });
+    const song = songs[startIndex];
+    set({
+      queue: songs,
+      currentIndex: startIndex,
+      positionMs: 0,
+      durationMs: song?.durationMs || 0,
+      history: [],
+      isPlaying: true,
+      desiredPlaying: true,
+    });
   },
   appendToQueue: (songs) => set((state) => ({ queue: [...state.queue, ...songs] })),
-  setPlaying: (isPlaying) => set({ isPlaying }),
-  togglePlay: () => set((state) => ({ isPlaying: !state.isPlaying })),
+  setPlaying: (isPlaying) => set({ desiredPlaying: isPlaying, isPlaying }),
+  togglePlay: () => set((state) => ({ desiredPlaying: !state.desiredPlaying })),
   setPosition: (positionMs) => set({ positionMs }),
   seekTo: (ms) => set({ seekRequestMs: ms }),
   clearSeek: () => set({ seekRequestMs: null }),
   setDuration: (durationMs) => set({ durationMs }),
+  setDurationFromSong: (ms) => {
+    if (ms > 0) set({ durationMs: ms });
+  },
   setRepeat: (mode) => {
     set({ repeat: mode });
     import('@/native/player').then(({ VinaraaPlayer }) => {
@@ -85,7 +100,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setShuffle: (shuffle) => set({ shuffle }),
   nextTrack: () => {
     const { queue, currentIndex, history, repeat, shuffle } = get();
-    // repeat 'one' is handled by engine directly — skip here
     const currentSong = queue[currentIndex];
     if (currentSong) {
       set({ history: [...history, currentSong] });
@@ -93,31 +107,26 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     if (shuffle && queue.length > 1) {
       let nextIndex = Math.floor(Math.random() * queue.length);
       while (nextIndex === currentIndex) nextIndex = Math.floor(Math.random() * queue.length);
-      set({ currentIndex: nextIndex, positionMs: 0, isPlaying: true });
+      set({ currentIndex: nextIndex, positionMs: 0, isPlaying: true, desiredPlaying: true });
       return;
     }
     if (currentIndex < queue.length - 1) {
-      // Engine subscriber detects index change and calls play() automatically
-      set({ currentIndex: currentIndex + 1, positionMs: 0, isPlaying: true });
+      set({ currentIndex: currentIndex + 1, positionMs: 0, isPlaying: true, desiredPlaying: true });
     } else if (repeat === 'all') {
-      // Wrap around — go back to start and play
-      set({ currentIndex: 0, positionMs: 0, isPlaying: true });
+      set({ currentIndex: 0, positionMs: 0, isPlaying: true, desiredPlaying: true });
     } else {
-      // No more songs and no loop
-      set({ isPlaying: false });
+      set({ isPlaying: false, desiredPlaying: false });
     }
   },
   previousTrack: () => {
     const { positionMs, currentIndex, history } = get();
     if (positionMs > 3000) {
-      // Restart current song
       get().seekTo(0);
       return;
     }
     const newIndex = Math.max(0, currentIndex - 1);
     const newHistory = history.length > 0 ? history.slice(0, -1) : history;
-    // Engine subscriber detects index change and calls play() automatically
-    set({ history: newHistory, currentIndex: newIndex, positionMs: 0, isPlaying: true });
+    set({ history: newHistory, currentIndex: newIndex, positionMs: 0, isPlaying: true, desiredPlaying: true });
   },
   setShowPlayer: (show) => set({ showPlayer: show }),
   setShowQueue: (show) => set({ showQueue: show }),
