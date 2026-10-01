@@ -24,8 +24,8 @@ class VinaraaPlayerPlugin : Plugin() {
     private var prefs: SharedPreferences? = null
     private val PREFS_NAME = "vinaraa_auth"
 
-    // Track the last seek position received from notification to avoid loop
-    private var lastNotificationSeekMs: Long = -1
+    // True while a JS-initiated seekTo() is being executed — suppresses echoing it back to JS
+    private var isSeeking = false
 
     private val mediaReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: android.content.Intent?) {
@@ -60,6 +60,7 @@ class VinaraaPlayerPlugin : Plugin() {
                     val controller = controllerFuture?.get()
                     player = controller
                     controller?.addListener(object : Player.Listener {
+
                         override fun onIsPlayingChanged(isPlaying: Boolean) {
                             activity?.runOnUiThread {
                                 val event = JSObject().apply { put("isPlaying", isPlaying) }
@@ -81,18 +82,16 @@ class VinaraaPlayerPlugin : Plugin() {
                             newPosition: Player.PositionInfo,
                             reason: Int
                         ) {
-                            // Fired when user seeks from the notification/lock screen
-                            if (reason == Player.DISCONTINUITY_REASON_SEEK) {
+                            // Only notify JS when seek came from the notification/lock-screen,
+                            // NOT from our own JS-initiated seekTo() call.
+                            if (reason == Player.DISCONTINUITY_REASON_SEEK && !isSeeking) {
                                 val seekMs = newPosition.positionMs
-                                // Only forward to JS if it came from notification (not from our own seekTo call)
-                                if (kotlin.math.abs(seekMs - lastNotificationSeekMs) > 200) {
-                                    activity?.runOnUiThread {
-                                        val event = JSObject().apply {
-                                            put("type", "seeked")
-                                            put("positionMs", seekMs)
-                                        }
-                                        notifyListeners("playbackStateChanged", event)
+                                activity?.runOnUiThread {
+                                    val event = JSObject().apply {
+                                        put("type", "seeked")
+                                        put("positionMs", seekMs)
                                     }
+                                    notifyListeners("playbackStateChanged", event)
                                 }
                             }
                         }
@@ -105,19 +104,27 @@ class VinaraaPlayerPlugin : Plugin() {
                         }
                     })
                 } catch (e: Exception) {
-                    // Controller not ready yet, will retry on next call via withPlayer
+                    // Controller not ready yet — will retry via withPlayer
                 }
             },
             ContextCompat.getMainExecutor(context)
         )
     }
 
+    // All Media3 calls MUST run on the main thread — withPlayer guarantees this.
     private fun withPlayer(action: (Player) -> Unit) {
         val p = player
-        if (p != null && p.isCommandAvailable(Player.COMMAND_PLAY_PAUSE)) {
-            activity?.runOnUiThread { action(p) }
+        if (p != null) {
+            activity?.runOnUiThread {
+                try {
+                    action(p)
+                } catch (e: Exception) {
+                    // If action fails (e.g. controller disconnected), re-init
+                    initPlayer()
+                }
+            }
         } else {
-            // Player not ready or controller lost — re-init and retry once
+            // Controller not connected yet — re-init if needed, then queue action
             if (controllerFuture == null || controllerFuture?.isDone == true) {
                 initPlayer()
             }
@@ -161,7 +168,6 @@ class VinaraaPlayerPlugin : Plugin() {
             call.reject("streamUrl is required")
             return
         }
-
         val title = call.getString("title")
         val artist = call.getString("artist")
         val artwork = call.getString("artwork")
@@ -194,7 +200,7 @@ class VinaraaPlayerPlugin : Plugin() {
     @PluginMethod
     fun resume(call: PluginCall) {
         withPlayer { p ->
-            // If player ended or is idle, it needs prepare before play
+            // After STATE_ENDED, ExoPlayer needs prepare() before play()
             if (p.playbackState == Player.STATE_IDLE || p.playbackState == Player.STATE_ENDED) {
                 p.prepare()
             }
@@ -212,13 +218,15 @@ class VinaraaPlayerPlugin : Plugin() {
     @PluginMethod
     fun seekTo(call: PluginCall) {
         val positionMs = call.getLong("positionMs", 0L) ?: 0L
-        lastNotificationSeekMs = positionMs
         withPlayer { p ->
-            // If player ended/idle, prepare it first so seek works
+            // Mark as JS-initiated seek so onPositionDiscontinuity doesn't echo it back
+            isSeeking = true
             if (p.playbackState == Player.STATE_IDLE || p.playbackState == Player.STATE_ENDED) {
                 p.prepare()
             }
             p.seekTo(positionMs)
+            // Reset flag after a short delay (after the discontinuity event fires)
+            activity?.window?.decorView?.postDelayed({ isSeeking = false }, 300)
         }
         call.resolve()
     }
@@ -250,7 +258,6 @@ class VinaraaPlayerPlugin : Plugin() {
                 call.resolve(ret)
             }
         } else {
-            // Return zeros if player not ready yet
             val ret = JSObject()
             ret.put("isPlaying", false)
             ret.put("positionMs", 0L)

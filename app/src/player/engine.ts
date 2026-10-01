@@ -145,14 +145,29 @@ export function startPlayerEngine() {
 
 function onEnded() {
   const s = usePlayerStore.getState();
-  const { repeat, currentIndex, queue } = s;
+  const { repeat, queue } = s;
 
   if (repeat === 'one') {
-    // Replay the same song — clear loadedId to force re-play
-    loadedId = null;
-    s.setQueue(queue, currentIndex);
-    s.setPlaying(true);
-  } else {
-    s.nextTrack();
+    // For repeat-one: seek back to 0 and resume — do NOT call setQueue (it resets history)
+    // Directly seek on native player and update store position
+    VinaraaPlayer.seekTo({ positionMs: 0 })
+      .then(() => VinaraaPlayer.resume())
+      .catch(() => {});
+    usePlayerStore.setState({ positionMs: 0, isPlaying: true });
+    return;
   }
+
+  // For normal next / repeat-all
+  if (queue.length === 1) {
+    // Edge case: only 1 song in queue — nextTrack() won't change the index or song ID,
+    // so the engine subscriber won't detect a change. Force re-play by clearing loadedId.
+    loadedId = null;
+    usePlayerStore.setState({ positionMs: 0, isPlaying: true });
+    // ↑ This triggers subscriber: song.id !== loadedId(null) → calls VinaraaPlayer.play()
+    return;
+  }
+
+  // Normal multi-song case — nextTrack() changes the index, subscriber detects new song ID
+  s.nextTrack();
 }
+
