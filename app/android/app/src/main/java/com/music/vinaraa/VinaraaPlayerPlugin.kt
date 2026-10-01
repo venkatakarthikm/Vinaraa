@@ -52,6 +52,13 @@ class VinaraaPlayerPlugin : Plugin() {
                             }
                         }
                     }
+
+                    override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                        activity?.runOnUiThread {
+                            val event = JSObject().apply { put("error", error.message) }
+                            notifyListeners("error", event)
+                        }
+                    }
                 })
             },
             ContextCompat.getMainExecutor(context)
@@ -117,7 +124,12 @@ class VinaraaPlayerPlugin : Plugin() {
 
     @PluginMethod
     fun resume(call: PluginCall) {
-        activity.runOnUiThread { player?.play() }
+        activity.runOnUiThread {
+            if (player?.playbackState == Player.STATE_IDLE) {
+                player?.prepare()
+            }
+            player?.play()
+        }
         call.resolve()
     }
 
@@ -131,6 +143,19 @@ class VinaraaPlayerPlugin : Plugin() {
     fun seekTo(call: PluginCall) {
         val positionMs = call.getLong("positionMs", 0L) ?: 0L
         activity.runOnUiThread { player?.seekTo(positionMs) }
+        call.resolve()
+    }
+
+    @PluginMethod
+    fun setRepeatMode(call: PluginCall) {
+        val mode = call.getString("mode", "off")
+        activity.runOnUiThread {
+            player?.repeatMode = when (mode) {
+                "one" -> Player.REPEAT_MODE_ONE
+                "all" -> Player.REPEAT_MODE_ALL
+                else -> Player.REPEAT_MODE_OFF
+            }
+        }
         call.resolve()
     }
 

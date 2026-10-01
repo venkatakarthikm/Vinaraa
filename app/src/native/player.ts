@@ -24,6 +24,8 @@ export interface VinaraaPlayerPlugin {
     bufferedMs: number;
     songId: string | null;
   }>;
+  /** Set repeat mode (off, all, one) */
+  setRepeatMode(options: { mode: string }): Promise<void>;
   /** Skip to next in queue */
   next(): Promise<void>;
   /** Skip to previous in queue */

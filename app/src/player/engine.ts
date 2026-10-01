@@ -18,6 +18,7 @@ export function startPlayerEngine() {
     const song = s.queue[s.currentIndex];
     if (song && (song.id !== loadedId || s.queue !== prev.queue && song.id !== loadedId)) {
       loadedId = song.id;
+      console.log(`[Player Engine] Streaming directly from CDN:`, song.streamUrl);
       await VinaraaPlayer.play({
         songId: song.id, streamUrl: song.streamUrl!, title: song.name,
         artist: song.artist, artwork: song.image,
@@ -63,6 +64,5 @@ export function startPlayerEngine() {
 
 async function onEnded() {
   const s = usePlayerStore.getState();
-  if (s.repeat === 'one') { loadedId = null; s.nextTrack(); return; }
   s.nextTrack();
 }

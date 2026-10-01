@@ -53,9 +53,11 @@ export async function apiClient<T>(
   }
 
   if (!response.ok || json.success === false) {
-    // Note: User explicitly requested to remove refresh token and logout on 401
-    // to maintain permanent login state.
     const err = json.error || {};
+    if (response.status === 401 && ['TOKEN_EXPIRED', 'TOKEN_INVALID', 'SESSION_REVOKED'].includes(err.code)) {
+      useAuthStore.getState().logout();
+      window.location.href = '/login';
+    }
     throw new ApiError(err.code || 'UNKNOWN_ERROR', err.message || response.statusText, err.details);
   }
 

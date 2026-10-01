@@ -27,6 +27,10 @@ export class VinaraaPlayerWebStub extends WebPlugin implements VinaraaPlayerPlug
     this.audio.addEventListener('ended', () => {
       this.notifyListeners('playbackStateChanged', { type: 'ended', isPlaying: false, songId: this.currentSongId });
     });
+    this.audio.addEventListener('error', (e) => {
+      console.warn('[VinaraaPlayer Web] Audio Error:', e);
+      this.notifyListeners('error', { error: 'Network or playback error' });
+    });
     this.audio.play().catch((err) => {
       console.warn('[VinaraaPlayer Web] Could not autoplay:', err.message);
     });
@@ -39,6 +43,20 @@ export class VinaraaPlayerWebStub extends WebPlugin implements VinaraaPlayerPlug
   }
 
   async resume(): Promise<void> {
+    if (this.audio && this.audio.error) {
+      // Re-initialize audio if it's in a broken state
+      const src = this.audio.src;
+      const time = this.audio.currentTime;
+      this.audio = new Audio(src);
+      this.audio.currentTime = time;
+      this.audio.addEventListener('ended', () => {
+        this.notifyListeners('playbackStateChanged', { type: 'ended', isPlaying: false, songId: this.currentSongId });
+      });
+      this.audio.addEventListener('error', (e) => {
+        console.warn('[VinaraaPlayer Web] Audio Error:', e);
+        this.notifyListeners('error', { error: 'Network or playback error' });
+      });
+    }
     await this.audio?.play();
     this.notifyListeners('playbackStateChanged', { isPlaying: true, songId: this.currentSongId });
   }
@@ -60,6 +78,12 @@ export class VinaraaPlayerWebStub extends WebPlugin implements VinaraaPlayerPlug
       bufferedMs: 0,
       songId: this.currentSongId,
     };
+  }
+
+  async setRepeatMode({ mode }: { mode: string }): Promise<void> {
+    if (this.audio) {
+      this.audio.loop = (mode === 'one');
+    }
   }
 
   async next(): Promise<void> {}

@@ -59,7 +59,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   isPlaying: false,
   positionMs: 0,
   durationMs: 0,
-  repeat: 'off',
+  repeat: 'all',
   shuffle: false,
   showPlayer: false,
   showQueue: false,
@@ -76,7 +76,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   seekTo: (ms) => set({ seekRequestMs: ms, positionMs: ms }),
   clearSeek: () => set({ seekRequestMs: null }),
   setDuration: (durationMs) => set({ durationMs }),
-  setRepeat: (mode) => set({ repeat: mode }),
+  setRepeat: (mode) => {
+    set({ repeat: mode });
+    import('@/native/player').then(({ VinaraaPlayer }) => {
+      VinaraaPlayer.setRepeatMode({ mode }).catch(() => {});
+    });
+  },
   setShuffle: (shuffle) => set({ shuffle }),
   nextTrack: () => {
     const { queue, currentIndex, history, repeat, shuffle } = get();
@@ -84,10 +89,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     if (currentSong) {
       set({ history: [...history, currentSong] });
     }
-    if (repeat === 'one') {
-      get().seekTo(0);
-      return;
-    }
+    // Repeat one is handled natively, but if nextTrack is called manually, we should advance
     if (shuffle && queue.length > 1) {
       let nextIndex = Math.floor(Math.random() * queue.length);
       while (nextIndex === currentIndex) nextIndex = Math.floor(Math.random() * queue.length);
@@ -98,7 +100,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       set({ currentIndex: currentIndex + 1, positionMs: 0 });
     } else {
       // Loop back to start if at the end of queue, but only play if repeat is 'all'
-      set({ currentIndex: 0, positionMs: 0, isPlaying: repeat === 'all' });
+      set({ currentIndex: 0, positionMs: 0 });
+      if (repeat === 'all') {
+        import('@/native/player').then(({ VinaraaPlayer }) => VinaraaPlayer.resume().catch(() => {}));
+      } else {
+        set({ isPlaying: false });
+      }
     }
   },
   previousTrack: () => {

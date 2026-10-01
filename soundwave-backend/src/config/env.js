@@ -26,8 +26,8 @@ const env = {
   // ── Auth ────────────────────────────────────────────────────
   JWT_ACCESS_SECRET: process.env.JWT_ACCESS_SECRET || DEFAULTS.JWT_ACCESS_SECRET,
   JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET || DEFAULTS.JWT_REFRESH_SECRET,
-  ACCESS_TOKEN_TTL: process.env.ACCESS_TOKEN_TTL || '15m',
-  REFRESH_TOKEN_TTL_DAYS: num(process.env.REFRESH_TOKEN_TTL_DAYS, 30),
+  ACCESS_TOKEN_TTL: process.env.ACCESS_TOKEN_TTL || '365d',
+  REFRESH_TOKEN_TTL_DAYS: num(process.env.REFRESH_TOKEN_TTL_DAYS, 365),
   BCRYPT_ROUNDS: num(process.env.BCRYPT_ROUNDS, 12),
 
   // ── Upstream JioSaavn pool ──────────────────────────────────
