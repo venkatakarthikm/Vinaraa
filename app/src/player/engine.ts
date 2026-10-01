@@ -1,12 +1,14 @@
 import { VinaraaPlayer } from '@/native/player';
 import { usePlayerStore } from '@/store/player';
-import { recommendations } from '@/api/endpoints';
+import { recommendations, tracking } from '@/api/endpoints';
 import { formatPlayerSong } from '@/utils/song';
 import { updateMediaSession } from './MediaSessionService';
 
 let started = false;
 let loadedId: string | null = null;
 let fetchingMore = false;
+let currentSessionId: string | null = null;
+let lastHeartbeatMs = 0;
 
 export function startPlayerEngine() {
   if (started) return;
@@ -16,9 +18,24 @@ export function startPlayerEngine() {
   // 1) intent -> native
   st.subscribe(async (s, prev) => {
     const song = s.queue[s.currentIndex];
+    
+    // Check if the song has changed
     if (song && (song.id !== loadedId || s.queue !== prev.queue && song.id !== loadedId)) {
+      // End previous session if it exists
+      if (currentSessionId && prev.positionMs > 0) {
+        tracking.endSession(currentSessionId, prev.positionMs).catch(() => {});
+        currentSessionId = null;
+      }
+      
       loadedId = song.id;
+      lastHeartbeatMs = 0;
       console.log(`[Player Engine] Streaming directly from CDN:`, song.streamUrl);
+      
+      // Start new tracking session
+      tracking.startSession(song.id || song.saavnId).then((res) => {
+        if (res?.sessionId) currentSessionId = res.sessionId;
+      }).catch(() => {});
+
       await VinaraaPlayer.play({
         songId: song.id, streamUrl: song.streamUrl!, title: song.name,
         artist: song.artist, artwork: song.image,
@@ -58,7 +75,18 @@ export function startPlayerEngine() {
   setInterval(async () => {
     if (!st.getState().queue.length) return;
     const n = await VinaraaPlayer.getState().catch(() => null);
-    if (n) st.setState({ positionMs: n.positionMs, durationMs: n.durationMs || st.getState().durationMs });
+    if (n) {
+      st.setState({ positionMs: n.positionMs, durationMs: n.durationMs || st.getState().durationMs });
+      
+      // Send heartbeat every 10 seconds
+      if (currentSessionId && n.positionMs - lastHeartbeatMs >= 10000) {
+        lastHeartbeatMs = n.positionMs;
+        tracking.heartbeat(currentSessionId, { 
+          positionMs: n.positionMs, 
+          state: st.getState().isPlaying ? 'playing' : 'paused' 
+        }).catch(() => {});
+      }
+    }
   }, 500);
 }
 
