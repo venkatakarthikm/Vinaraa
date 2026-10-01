@@ -5,8 +5,9 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import { ToastContainer } from '@/components/Toast';
 import Navigator from '@/navigation/Navigator';
-import { useNavigate as _useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { startPlayerEngine } from '@/player/engine';
+import { usePlayerStore } from '@/store/player';
 import OneSignal from 'onesignal-cordova-plugin';
 import { notifications } from '@/api/endpoints';
 
@@ -73,11 +74,18 @@ const MAIN_TABS = ['/home', '/search', '/library', '/stats'];
 
 function AppWrapper() {
   const location = useLocation();
+  const navigate = useNavigate();
 
   useEffect(() => {
     startPlayerEngine();
     setupOneSignal();
-    
+
+    const handleOpenPlayer = () => {
+      usePlayerStore.getState().setShowPlayer(true);
+      navigate('/player');
+    };
+    window.addEventListener('openPlayerIntent', handleOpenPlayer);
+
     const listener = CapacitorApp.addListener('backButton', (_: any) => {
       const path = location.pathname;
       if (MAIN_TABS.includes(path) || path === '/' || path === '/welcome') {
@@ -86,8 +94,12 @@ function AppWrapper() {
       }
       window.history.back();
     });
-    return () => { listener.then((l: any) => l.remove()); };
-  }, [location]);
+
+    return () => {
+      window.removeEventListener('openPlayerIntent', handleOpenPlayer);
+      listener.then((l: any) => l.remove());
+    };
+  }, [location, navigate]);
 
   return <Navigator />;
 }

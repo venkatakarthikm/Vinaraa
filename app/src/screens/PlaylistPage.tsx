@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { playlists, music } from '@/api/endpoints';
-import { ChevronLeft, Play, Shuffle, Trash2, Globe } from 'lucide-react';
+import { ChevronLeft, Play, Shuffle, Globe } from 'lucide-react';
 import { usePlayerStore } from '@/store/player';
 import { SongRowSkeleton } from '@/components/Skeleton';
-import MiniPlayer from '@/components/MiniPlayer';
-import { formatPlayerSong, getArtistsText } from '@/utils/song';
-import { getSongImage } from '@/utils/image';
+import { formatPlayerSong } from '@/utils/song';
+import SongRow from '@/components/SongRow';
 
 export default function PlaylistPage() {
   const { id } = { id: window.location.pathname.split('/').pop() };
@@ -44,10 +43,6 @@ export default function PlaylistPage() {
           .editorialPlaylist(id)
           .then((ed) => {
             if (ed) {
-              const declared = Number(/(\d+)\s+songs/.exec(ed.description || '')?.[1] || 0);
-              if (declared && (ed.songs || []).length < declared) {
-                console.warn(`[playlist] truncated: got ${(ed.songs || []).length} of ${declared}`);
-              }
               setPlaylist(ed);
             }
             setLoading(false);
@@ -74,6 +69,9 @@ export default function PlaylistPage() {
       tracks: (pl.tracks || pl.songs || []).filter(
         (s: any) => (s.songId || s.id || s.saavnId) !== songId
       ),
+      songs: (pl.songs || []).filter(
+        (s: any) => (s.songId || s.id || s.saavnId) !== songId
+      ),
     }));
   };
 
@@ -81,6 +79,8 @@ export default function PlaylistPage() {
     playlist?.coverImageUrl ||
     playlist?.artwork ||
     (Array.isArray(playlist?.image) ? playlist.image[playlist.image.length - 1]?.url : null);
+
+  const canRemove = !playlist?.isSystem && playlist?.isOwner === true;
 
   return (
     <div className="flex flex-col h-full bg-bg">
@@ -92,7 +92,7 @@ export default function PlaylistPage() {
           <div className="absolute inset-0 bg-gradient-to-b from-black/30 to-bg" />
           <button
             onClick={() => navigate(-1)}
-            className="absolute top-4 left-4 p-2.5 rounded-full bg-black/40 backdrop-blur-sm"
+            className="absolute top-4 left-4 p-2.5 rounded-full bg-black/40 backdrop-blur-sm z-20"
             style={{ marginTop: 'env(safe-area-inset-top)' }}
           >
             <ChevronLeft size={22} className="text-white" />
@@ -129,37 +129,26 @@ export default function PlaylistPage() {
                 </button>
               </div>
               <h2 className="text-text font-bold mb-3">Songs</h2>
-              {playlistSongs.map((song: any, i: number) => (
-                <div key={song.songId || song.id || song.saavnId} className="flex items-center gap-3 py-3">
-                  <button onClick={() => handlePlay(i)} className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="w-12 h-12 rounded-xl overflow-hidden flex-shrink-0 bg-surface-2">
-                      {getSongImage(song) && (
-                        <img src={getSongImage(song)} alt={song.name} className="w-full h-full object-cover" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0 text-left">
-                      <p className="text-text text-sm font-semibold line-clamp-1">{song.name}</p>
-                      <p className="text-muted text-xs line-clamp-1">{getArtistsText(song)}</p>
-                    </div>
-                  </button>
-                  {!playlist?.isSystem && playlist?.isOwner !== false && (
-                    <button
-                      onClick={() => removeSong(song.songId || song.id || song.saavnId)}
-                      className="p-2 text-muted flex-shrink-0"
-                      aria-label="Remove"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  )}
-                </div>
-              ))}
+              <div className="flex flex-col gap-1">
+                {playlistSongs.map((song: any, i: number) => {
+                  const formatted = formatPlayerSong(song);
+                  const songId = song.songId || song.id || song.saavnId;
+                  return (
+                    <SongRow
+                      key={songId || i}
+                      song={formatted}
+                      onPlay={() => handlePlay(i)}
+                      onRemoveFromPlaylist={canRemove ? () => removeSong(songId) : undefined}
+                    />
+                  );
+                })}
+              </div>
             </>
           )}
           {loading && Array.from({ length: 6 }).map((_, i) => <SongRowSkeleton key={i} />)}
         </div>
         <div className="h-4" />
       </div>
-      <MiniPlayer />
     </div>
   );
 }

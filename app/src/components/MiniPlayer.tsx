@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { usePlayerStore } from '@/store/player';
 import { Play, Pause, SkipForward } from 'lucide-react';
 import { springs } from '@/motion';
+import Marquee from './Marquee';
 
 export default function MiniPlayer() {
   const { queue, currentIndex, isPlaying, togglePlay, nextTrack, setShowPlayer, showPlayer, positionMs, durationMs } = usePlayerStore();
@@ -29,8 +30,8 @@ export default function MiniPlayer() {
           <div className="w-12 h-12 rounded-xl overflow-hidden flex-shrink-0 bg-surface-2">
             {song.image && <img src={song.image} alt={song.name} className="w-full h-full object-cover" />}
           </div>
-          <div className="flex-1 min-w-0 text-left">
-            <p className="text-text text-sm font-semibold line-clamp-1">{song.name}</p>
+          <div className="flex-1 min-w-0 text-left overflow-hidden">
+            <Marquee text={song.name} className="text-text text-sm font-semibold mb-0.5" />
             <p className="text-muted text-xs line-clamp-1">{song.artist}</p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">

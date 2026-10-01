@@ -9,6 +9,14 @@ export class VinaraaPlayerWebStub extends WebPlugin implements VinaraaPlayerPlug
   private audio: HTMLAudioElement | null = null;
   private currentSongId: string | null = null;
 
+  async checkIntent(): Promise<{ openPlayer: boolean }> {
+    return { openPlayer: false };
+  }
+
+  async isOnline(): Promise<{ isOnline: boolean }> {
+    return { isOnline: navigator.onLine };
+  }
+
   async setAuth({ accessToken, refreshToken }: { accessToken: string; refreshToken: string }): Promise<void> {
     if (accessToken) localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
     else localStorage.removeItem(ACCESS_TOKEN_KEY);
@@ -37,10 +45,26 @@ export class VinaraaPlayerWebStub extends WebPlugin implements VinaraaPlayerPlug
     this.notifyListeners('playbackStateChanged', { isPlaying: true, songId });
   }
 
-  async setQueue({ items, startIndex }: { items: { songId: string; streamUrl: string; title: string; artist: string; artwork?: string }[]; startIndex: number; repeatMode: string }): Promise<void> {
+  async setQueue({ items, startIndex, positionMs, play = true }: { items: { songId: string; streamUrl: string; title: string; artist: string; artwork?: string }[]; startIndex: number; repeatMode: string; positionMs?: number; play?: boolean }): Promise<void> {
     const item = items[startIndex];
     if (item) {
-      await this.play(item);
+      this.currentSongId = item.songId;
+      if (this.audio) { this.audio.pause(); this.audio = null; }
+      this.audio = new Audio(item.streamUrl);
+      if (positionMs) this.audio.currentTime = positionMs / 1000;
+      this.audio.addEventListener('ended', () => {
+        this.notifyListeners('playbackStateChanged', { type: 'ended', isPlaying: false, songId: this.currentSongId });
+      });
+      this.audio.addEventListener('error', (e) => {
+        console.warn('[VinaraaPlayer Web] Audio Error:', e);
+        this.notifyListeners('error', { error: 'Network or playback error' });
+      });
+      if (play) {
+        this.audio.play().catch((err) => console.warn('[VinaraaPlayer Web] Could not autoplay:', err.message));
+        this.notifyListeners('playbackStateChanged', { isPlaying: true, songId: this.currentSongId });
+      } else {
+        this.notifyListeners('playbackStateChanged', { isPlaying: false, songId: this.currentSongId });
+      }
     }
   }
 

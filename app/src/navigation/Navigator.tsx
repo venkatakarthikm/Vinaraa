@@ -22,40 +22,43 @@ import Settings from '@/screens/Settings';
 import Offline from '@/screens/Offline';
 import NotFound from '@/screens/NotFound';
 import { BottomNav } from '@/components/BottomNav';
-
-const MAIN_PATHS = ['/home', '/search', '/library', '/stats'];
+import MiniPlayer from '@/components/MiniPlayer';
 
 export default function Navigator() {
   const location = useLocation();
-  const isMainTab = MAIN_PATHS.includes(location.pathname);
+  const showNav = !location.pathname.startsWith('/player');
 
   return (
-    <>
-      <AnimatePresence mode="wait">
-        <Routes location={location} key={location.pathname}>
-          <Route path="/" element={<Splash />} />
-          <Route path="/welcome" element={<Welcome />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/onboarding" element={<Onboarding />} />
-          <Route path="/home" element={<Home />} />
-          <Route path="/search" element={<Search />} />
-          <Route path="/library" element={<Library />} />
-          <Route path="/stats" element={<Stats />} />
-          <Route path="/album/:id" element={<Album />} />
-          <Route path="/artist/:id" element={<Artist />} />
-          <Route path="/playlist/:id" element={<PlaylistPage />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="/player" element={<FullPlayer />} />
-          <Route path="/player/:id" element={<FullPlayer />} />
-          <Route path="/offline" element={<Offline />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </AnimatePresence>
-      {isMainTab && <BottomNav />}
-    </>
+    <div className="relative w-full h-full bg-bg overflow-hidden flex flex-col">
+      <div className="flex-1 relative overflow-hidden">
+        <AnimatePresence mode="wait">
+          <Routes location={location} key={location.pathname}>
+            <Route path="/" element={<Splash />} />
+            <Route path="/welcome" element={<Welcome />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/onboarding" element={<Onboarding />} />
+            <Route path="/home" element={<Home />} />
+            <Route path="/search" element={<Search />} />
+            <Route path="/library" element={<Library />} />
+            <Route path="/stats" element={<Stats />} />
+            <Route path="/album/:id" element={<Album />} />
+            <Route path="/artist/:id" element={<Artist />} />
+            <Route path="/playlist/:id" element={<PlaylistPage />} />
+            <Route path="/profile" element={<Profile />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="/player" element={<FullPlayer />} />
+            <Route path="/player/:id" element={<FullPlayer />} />
+            <Route path="/offline" element={<Offline />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </AnimatePresence>
+      </div>
+
+      {showNav && <MiniPlayer />}
+      {showNav && <BottomNav />}
+    </div>
   );
 }

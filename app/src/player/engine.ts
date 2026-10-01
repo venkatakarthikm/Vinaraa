@@ -3,6 +3,7 @@ import { usePlayerStore } from '@/store/player';
 import { recommendations, tracking } from '@/api/endpoints';
 import { formatPlayerSong } from '@/utils/song';
 import { updateMediaSession } from './MediaSessionService';
+import { App } from '@capacitor/app';
 
 let started = false;
 let loadedId: string | null = null;
@@ -16,6 +17,22 @@ export function startPlayerEngine() {
   if (started) return;
   started = true;
   const st = usePlayerStore;
+
+  const checkNotificationIntent = async () => {
+    try {
+      const res = await VinaraaPlayer.checkIntent();
+      if (res.openPlayer) {
+        st.getState().setShowPlayer(true);
+      }
+    } catch (e) {}
+  };
+  checkNotificationIntent();
+  App.addListener('appStateChange', ({ isActive }) => {
+    if (isActive) checkNotificationIntent();
+  });
+  window.addEventListener('openPlayerIntent', () => {
+    st.getState().setShowPlayer(true);
+  });
 
   // 1) JS store → native player
   st.subscribe(async (s, prev) => {
@@ -54,6 +71,8 @@ export function startPlayerEngine() {
         })),
         startIndex: s.currentIndex,
         repeatMode: s.repeat,
+        positionMs: s.positionMs,
+        play: s.isPlaying || s.desiredPlaying,
       }).catch(() => {
         // Fallback to single play if setQueue fails
         VinaraaPlayer.play({
@@ -97,12 +116,26 @@ export function startPlayerEngine() {
     }
   });
 
-  // 2) Native → JS store
   VinaraaPlayer.addListener('songChanged', (e: any) => {
     if (typeof e.index === 'number' && e.index >= 0) {
       const s = st.getState();
       if (s.currentIndex !== e.index) {
-        st.setState({ currentIndex: e.index, isPlaying: e.isPlaying ?? true });
+        const nextSong = s.queue[e.index];
+        if (nextSong) {
+          loadedId = nextSong.id;
+          activeSongIdForTracking = nextSong.id;
+          if (currentSessionId) {
+             tracking.endSession(currentSessionId, Math.round(s.positionMs || 0)).catch(() => {});
+             currentSessionId = null;
+          }
+          lastHeartbeatMs = 0;
+          tracking.startSession(nextSong.id).then((res) => {
+             if (res?.sessionId && activeSongIdForTracking === nextSong.id) {
+               currentSessionId = res.sessionId;
+             }
+          }).catch(() => {});
+        }
+        st.setState({ currentIndex: e.index, isPlaying: e.isPlaying ?? true, positionMs: 0 });
       }
     }
   });

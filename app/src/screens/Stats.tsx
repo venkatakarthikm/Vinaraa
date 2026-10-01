@@ -57,9 +57,9 @@ export default function Stats() {
           <AnimatePresence mode="wait">
             <motion.div key={range} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
               <div className="flex flex-col gap-3 mb-6">
-                <StatCard label="Total Listening Time" value={msToReadable(dashboard?.overview?.totalMs || 0)} icon={<Clock size={22} className="text-primary-soft" />} />
-                <StatCard label="Songs Played" value={(dashboard?.overview?.songCount || 0).toLocaleString()} icon={<Music2 size={22} className="text-mint" />} />
-                <StatCard label="Unique Tracks" value={(dashboard?.overview?.uniqueSongs || 0).toLocaleString()} icon={<TrendingUp size={22} className="text-accent" />} />
+                <StatCard label="Total Listening Time" value={dashboard?.overview?.listeningTime?.text || '0m'} icon={<Clock size={22} className="text-primary-soft" />} />
+                <StatCard label="Songs Played" value={(dashboard?.overview?.plays || 0).toLocaleString()} icon={<Music2 size={22} className="text-mint" />} />
+                <StatCard label="Unique Tracks" value={(dashboard?.overview?.distinct?.songs || 0).toLocaleString()} icon={<TrendingUp size={22} className="text-accent" />} />
               </div>
 
               {dashboard?.insights?.sentences?.length > 0 && (
@@ -75,14 +75,14 @@ export default function Stats() {
                 </div>
               )}
 
-              {dashboard?.timeline?.length > 0 && (
+              {dashboard?.timeline?.points?.length > 0 && (
                 <div className="mb-6">
                   <h2 className="text-text font-bold mb-3">Listening Activity</h2>
                   <div className="bg-surface-2 border border-border rounded-2xl p-4">
                     <ResponsiveContainer width="100%" height={140}>
-                      <BarChart data={dashboard.timeline}>
-                        <Bar dataKey="ms" fill="#8B3DFF" radius={[4, 4, 0, 0]} />
-                        <XAxis dataKey="date" tick={{ fill: '#9A98BD', fontSize: 10 }} axisLine={false} tickLine={false} />
+                      <BarChart data={dashboard.timeline.points}>
+                        <Bar dataKey="listenedMs" fill="#8B3DFF" radius={[4, 4, 0, 0]} />
+                        <XAxis dataKey="day" tick={{ fill: '#9A98BD', fontSize: 10 }} axisLine={false} tickLine={false} />
                         <Tooltip
                           contentStyle={{ background: '#14142B', border: '1px solid #2A2A4A', borderRadius: 12 }}
                           labelStyle={{ color: '#F4F3FF' }}
@@ -94,39 +94,39 @@ export default function Stats() {
                 </div>
               )}
 
-              {dashboard?.topSongs?.length > 0 && (
+              {dashboard?.top?.songs?.items?.length > 0 && (
                 <div className="mb-6">
                   <h2 className="text-text font-bold mb-3">Top Songs</h2>
-                  {dashboard.topSongs.slice(0, 5).map((s: any, i: number) => (
+                  {dashboard.top.songs.items.slice(0, 5).map((s: any, i: number) => (
                     <div key={i} className="flex items-center gap-3 py-2.5">
                       <span className="w-5 text-muted text-sm text-right flex-shrink-0">{i + 1}</span>
                       <div className="w-10 h-10 rounded-xl overflow-hidden bg-surface-2 flex-shrink-0">
                         {s.image && <img src={s.image} alt={s.name} className="w-full h-full object-cover" />}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-text text-sm font-semibold line-clamp-1">{s.name || s.songName}</p>
-                        <p className="text-muted text-xs">{s.artist || s.singerName}</p>
+                        <p className="text-text text-sm font-semibold line-clamp-1">{s.name}</p>
+                        <p className="text-muted text-xs">{s.subtitle}</p>
                       </div>
-                      <span className="text-mint text-xs font-bold flex-shrink-0">{msToReadable(s.totalMs || 0)}</span>
+                      <span className="text-mint text-xs font-bold flex-shrink-0">{s.listenedText || msToReadable(s.listenedMs || 0)}</span>
                     </div>
                   ))}
                 </div>
               )}
 
-              {dashboard?.topLanguages?.length > 0 && (
+              {dashboard?.top?.languages?.items?.length > 0 && (
                 <div className="mb-6">
                   <h2 className="text-text font-bold mb-3">By Language</h2>
                   <div className="flex flex-col gap-2">
-                    {dashboard.topLanguages.slice(0, 5).map((l: any, i: number) => {
-                      const pct = dashboard.topLanguages[0]?.totalMs ? (l.totalMs / dashboard.topLanguages[0].totalMs) * 100 : 0;
+                    {dashboard.top.languages.items.slice(0, 5).map((l: any, i: number) => {
+                      const pct = dashboard.top.languages.items[0]?.listenedMs ? (l.listenedMs / dashboard.top.languages.items[0].listenedMs) * 100 : 0;
                       return (
                         <div key={i} className="flex items-center gap-3">
-                          <span className="text-muted text-xs w-16 capitalize flex-shrink-0">{l.language}</span>
+                          <span className="text-muted text-xs w-16 capitalize flex-shrink-0">{l.name}</span>
                           <div className="flex-1 bg-surface-2 rounded-full h-2 overflow-hidden">
                             <motion.div className="h-full bg-primary rounded-full" initial={{ width: 0 }}
                               animate={{ width: `${pct}%` }} transition={{ duration: 0.7, delay: i * 0.1 }} />
                           </div>
-                          <span className="text-text text-xs font-semibold w-12 text-right">{msToReadable(l.totalMs)}</span>
+                          <span className="text-text text-xs font-semibold w-12 text-right">{l.listenedText || msToReadable(l.listenedMs)}</span>
                         </div>
                       );
                     })}

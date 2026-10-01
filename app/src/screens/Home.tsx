@@ -7,7 +7,6 @@ import { useUIStore } from '@/store/ui';
 import { useNavigate } from 'react-router-dom';
 import { CardSkeleton } from '@/components/Skeleton';
 import { Bell, Play, ChevronRight, Music2, Sparkles, Mic2, Film } from 'lucide-react';
-import MiniPlayer from '@/components/MiniPlayer';
 import { getSongImage } from '@/utils/image';
 import { formatPlayerSong, getArtistsText } from '@/utils/song';
 import { usePlayerStore } from '@/store/player';
@@ -143,7 +142,39 @@ export default function Home() {
     }
   };
 
-  useEffect(() => { loadData(); }, []);
+  const [startY, setStartY] = useState(0);
+  const [currentY, setCurrentY] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const pullDistance = Math.max(0, currentY - startY);
+  const maxPull = 70;
+  const isPulling = startY > 0 && pullDistance > 0;
+
+  const handleTouchStart = (e: any) => {
+    if (e.currentTarget.scrollTop <= 0) {
+      setStartY(e.touches[0].clientY);
+      setCurrentY(e.touches[0].clientY);
+    }
+  };
+  const handleTouchMove = (e: any) => {
+    if (startY > 0) setCurrentY(e.touches[0].clientY);
+  };
+  const handleTouchEnd = async () => {
+    if (isPulling && pullDistance >= maxPull) {
+      setRefreshing(true);
+      await loadData();
+      setRefreshing(false);
+    }
+    setStartY(0);
+    setCurrentY(0);
+  };
+
+  useEffect(() => { 
+    loadData(); 
+    const interval = setInterval(() => {
+      loadData();
+    }, 5 * 60 * 1000); // 5 minutes
+    return () => clearInterval(interval);
+  }, []);
 
   const handlePlay = (song: any, contextQueue: any[]) => {
     const queue = contextQueue.map(formatPlayerSong);
@@ -184,8 +215,20 @@ export default function Home() {
     <div className="flex flex-col h-full bg-bg overflow-hidden relative">
       <div className="absolute top-0 left-0 right-0 h-[400px] bg-gradient-to-b from-primary/15 via-primary/5 to-bg z-0 pointer-events-none" />
       
-      <div className="flex-1 scroll-y overflow-y-auto pb-24 z-10">
-        <div className="flex items-center justify-between px-5 pt-10 pb-6 sticky top-0 z-20 bg-gradient-to-b from-bg/90 to-bg/0 backdrop-blur-md">
+      <div 
+        className="flex-1 scroll-y overflow-y-auto pb-24 z-10"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        <div className="overflow-hidden flex justify-center items-center transition-all duration-300" style={{ height: refreshing ? maxPull : (isPulling ? Math.min(pullDistance, maxPull) : 0) }}>
+          {refreshing ? (
+            <div className="w-6 h-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+          ) : (
+            <span className="text-muted text-xs uppercase tracking-widest font-bold" style={{ opacity: pullDistance / maxPull }}>Pull to refresh</span>
+          )}
+        </div>
+        <div className="flex items-center justify-between px-5 pt-4 pb-6 sticky top-0 z-20 bg-gradient-to-b from-bg/90 to-bg/0 backdrop-blur-md">
           <div>
             <p className="text-muted text-[13px] font-bold uppercase tracking-wider mb-0.5 flex items-center gap-1.5">
                {getGreeting()}
@@ -310,7 +353,6 @@ export default function Home() {
         )}
         <div className="h-6" />
       </div>
-      <MiniPlayer />
     </div>
   );
 }

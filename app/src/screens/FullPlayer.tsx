@@ -2,15 +2,17 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence, useDragControls } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { usePlayerStore } from '@/store/player';
-import { tracking } from '@/api/endpoints';
+import { tracking, playlists } from '@/api/endpoints';
 import {
   ChevronDown, Heart, MoreHorizontal, SkipBack, SkipForward,
-  Play, Pause, Shuffle, Repeat, Repeat1, Share2, Download, Plus
+  Play, Pause, Shuffle, Repeat, Repeat1, Share2, Download, Plus, ListMusic, Info
 } from 'lucide-react';
 import { springs } from '@/motion';
-import { playlists } from '@/api/endpoints';
 import { VinaraaPlayer } from '@/native/player';
 import { useUIStore } from '@/store/ui';
+import Marquee from '@/components/Marquee';
+import QueueSheet from '@/components/QueueSheet';
+import { saveDownloadedSong } from '@/utils/offline';
 
 type PlayerTab = 'photo' | 'lyrics' | 'info';
 
@@ -33,6 +35,9 @@ export default function FullPlayer() {
   const [lyrics, setLyrics] = useState<any>(null);
   const [seeking, setSeeking] = useState(false);
   const [seekValue, setSeekValue] = useState(0);
+  const [showQueueSheet, setShowQueueSheet] = useState(false);
+  const [showTopMenu, setShowTopMenu] = useState(false);
+
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const positionRef = useRef(positionMs);
   const lyricsContainerRef = useRef<HTMLDivElement>(null);
@@ -126,7 +131,6 @@ export default function FullPlayer() {
     }
     const targetFraction = seekValRef.current;
     const newPos = Math.round(Math.max(0, Math.min(effectiveDuration - 500, targetFraction * effectiveDuration)));
-    console.log('[FullPlayer Seek] Seeking to:', newPos, 'ms');
     seekTo(newPos);
     usePlayerStore.setState({ positionMs: newPos });
     setSeeking(false);
@@ -157,13 +161,32 @@ export default function FullPlayer() {
     try {
       if (navigator.share) await navigator.share({ title: `Listen to ${song.name}`, url: window.location.href });
     } catch (e) { console.error(e); }
+    setShowTopMenu(false);
   };
 
   const handleDownload = async () => {
-    if (!song?.streamUrl) return;
+    if (!song?.streamUrl) {
+      addToast('Download URL unavailable', 'error');
+      return;
+    }
     try {
-      await VinaraaPlayer.download({ url: song.streamUrl, title: song.name, fileName: `${song.name}.mp3` });
-    } catch (e) { console.error(e); }
+      addToast(`Downloading ${song.name}…`, 'info');
+      const safeName = song.name.replace(/[^a-zA-Z0-9.\-_ \(\)]/g, '');
+      await VinaraaPlayer.download({ url: song.streamUrl, title: song.name, fileName: `${safeName}.mp3` });
+      await saveDownloadedSong({
+        id: song.id,
+        name: song.name,
+        artist: song.artist,
+        image: song.image,
+        durationMs: song.durationMs,
+        streamUrl: song.streamUrl,
+        downloadedAt: Date.now(),
+      });
+      addToast('Download started in background', 'success');
+    } catch (e: any) {
+      addToast(e?.message || 'Download failed', 'error');
+    }
+    setShowTopMenu(false);
   };
 
   const [showSaveSheet, setShowSaveSheet] = useState(false);
@@ -173,6 +196,7 @@ export default function FullPlayer() {
   const handleSaveToPlaylistClick = async () => {
     if (!song) return;
     setShowSaveSheet(true);
+    setShowTopMenu(false);
     try {
       const [plRes, nameRes] = await Promise.all([
         playlists.list(),
@@ -198,7 +222,6 @@ export default function FullPlayer() {
       setShowSaveSheet(false);
       addToast('Added to playlist', 'success');
     } catch (e: any) {
-      console.error(e);
       addToast(e?.message || 'Failed to add to playlist', 'error');
     }
   };
@@ -214,7 +237,7 @@ export default function FullPlayer() {
 
   return (
     <motion.div
-      className="flex flex-col h-full bg-bg overflow-hidden relative"
+      className="flex flex-col h-full bg-bg overflow-hidden relative z-50"
       initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
       transition={springs.sheet}
       drag="y"
@@ -234,7 +257,7 @@ export default function FullPlayer() {
         </button>
         <div className="w-12 h-1.5 bg-border rounded-full opacity-50 absolute left-1/2 -translate-x-1/2 top-4" />
         <p className="text-muted text-[10px] uppercase tracking-widest font-bold">Now Playing</p>
-        <button className="p-2 -mr-2" aria-label="More options">
+        <button onClick={() => setShowTopMenu(true)} className="p-2 -mr-2" aria-label="More options">
           <MoreHorizontal size={26} className="text-text" />
         </button>
       </div>
@@ -334,15 +357,15 @@ export default function FullPlayer() {
       </motion.div>
 
       <div className="px-6 py-2 flex items-center justify-between bg-gradient-to-t from-bg via-bg to-transparent">
-        <div className="min-w-0 pr-4">
-          <h2 className="text-text text-2xl font-bold leading-tight line-clamp-1">{song.name}</h2>
+        <div className="min-w-0 pr-4 flex-1 overflow-hidden">
+          <Marquee text={song.name} className="text-text text-2xl font-bold leading-tight" />
           <p className="text-muted text-sm font-medium line-clamp-1 mt-1">{song.artist}</p>
         </div>
         <motion.button
           onClick={handleLike}
           whileTap={{ scale: 1.35 }}
           transition={{ type: 'spring' as const, stiffness: 500, damping: 15 }}
-          className="p-3 bg-surface-2 rounded-full border border-border flex-shrink-0"
+          className="p-3 bg-surface-2 rounded-full border border-border flex-shrink-0 ml-2"
           aria-label={liked ? 'Unlike' : 'Like'}
         >
           <Heart size={24} fill={liked ? '#FF3D8E' : 'none'} className={liked ? 'text-[#FF3D8E]' : 'text-text'} />
@@ -407,7 +430,10 @@ export default function FullPlayer() {
             {repeat === 'one' ? <Repeat1 size={24} className="text-primary-soft" /> : <Repeat size={24} className={repeat === 'all' ? 'text-primary-soft' : 'text-muted'} />}
           </button>
         </div>
-        <div className="flex items-center justify-center gap-8 mt-4 pb-2">
+        <div className="flex items-center justify-center gap-6 mt-4 pb-2">
+          <button onClick={() => setShowQueueSheet(true)} className="p-3 bg-surface-2 rounded-full border border-border" aria-label="Playing Queue">
+            <ListMusic size={20} className="text-primary-soft" />
+          </button>
           <button onClick={handleSaveToPlaylistClick} className="p-3 bg-surface-2 rounded-full border border-border" aria-label="Add to playlist"><Plus size={20} className="text-text" /></button>
           <button onClick={handleDownload} className="p-3 bg-surface-2 rounded-full border border-border" aria-label="Download"><Download size={20} className="text-text" /></button>
           <button onClick={handleShare} className="p-3 bg-surface-2 rounded-full border border-border" aria-label="Share"><Share2 size={20} className="text-text" /></button>
@@ -415,6 +441,30 @@ export default function FullPlayer() {
       </div>
       <div style={{ paddingBottom: 'env(safe-area-inset-bottom)' }} />
 
+      {/* Queue Drawer Sheet */}
+      <QueueSheet isOpen={showQueueSheet} onClose={() => setShowQueueSheet(false)} />
+
+      {/* Top 3-Dots Header Options Sheet */}
+      <AnimatePresence>
+        {showTopMenu && (
+          <div className="absolute inset-0 z-50 flex flex-col justify-end">
+            <motion.div className="absolute inset-0 bg-black/60 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowTopMenu(false)} />
+            <motion.div
+              className="bg-surface/95 border-t border-border rounded-t-3xl p-5 pb-safe z-10 flex flex-col gap-3 shadow-2xl"
+              initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+              transition={springs.sheet}
+            >
+              <div className="w-12 h-1.5 bg-border rounded-full opacity-50 mx-auto mb-2" />
+              <button onClick={handleShare} className="flex items-center gap-4 py-3 px-3 rounded-xl hover:bg-surface-2 font-bold text-sm text-text"><Share2 size={20} className="text-primary-soft" /> Share Song</button>
+              <button onClick={handleDownload} className="flex items-center gap-4 py-3 px-3 rounded-xl hover:bg-surface-2 font-bold text-sm text-text"><Download size={20} className="text-primary-soft" /> Download Song</button>
+              <button onClick={handleSaveToPlaylistClick} className="flex items-center gap-4 py-3 px-3 rounded-xl hover:bg-surface-2 font-bold text-sm text-text"><Plus size={20} className="text-primary-soft" /> Save to Playlist</button>
+              <button onClick={() => { setPlayerTab('info'); setShowTopMenu(false); }} className="flex items-center gap-4 py-3 px-3 rounded-xl hover:bg-surface-2 font-bold text-sm text-text"><Info size={20} className="text-primary-soft" /> Song Details</button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Save to Playlist Sheet */}
       <AnimatePresence>
         {showSaveSheet && (
           <motion.div

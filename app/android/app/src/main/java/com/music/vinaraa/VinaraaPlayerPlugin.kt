@@ -153,6 +153,35 @@ class VinaraaPlayerPlugin : Plugin() {
         }
     }
 
+    private fun isInternetAvailable(): Boolean {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager ?: return false
+        val network = cm.activeNetwork ?: return false
+        val capabilities = cm.getNetworkCapabilities(network) ?: return false
+        return capabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+               capabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    }
+
+    @PluginMethod
+    fun isOnline(call: PluginCall) {
+        val ret = JSObject().apply {
+            put("isOnline", isInternetAvailable())
+        }
+        call.resolve(ret)
+    }
+
+    @PluginMethod
+    fun checkIntent(call: PluginCall) {
+        val intent = activity?.intent
+        val openPlayer = intent?.getBooleanExtra("OPEN_PLAYER", false) ?: false
+        if (openPlayer) {
+            intent?.removeExtra("OPEN_PLAYER")
+        }
+        val ret = JSObject().apply {
+            put("openPlayer", openPlayer)
+        }
+        call.resolve(ret)
+    }
+
     @PluginMethod
     fun setAuth(call: PluginCall) {
         val accessToken = call.getString("accessToken", "")
@@ -180,6 +209,8 @@ class VinaraaPlayerPlugin : Plugin() {
         val itemsArr = call.getArray("items") ?: return call.reject("items required")
         val startIndex = call.getInt("startIndex", 0) ?: 0
         val repeatMode = call.getString("repeatMode", "off") ?: "off"
+        val positionMs = call.getLong("positionMs") ?: call.getInt("positionMs")?.toLong() ?: 0L
+        val autoPlay = call.getBoolean("play", true) ?: true
         val built = ArrayList<MediaItem>()
         for (i in 0 until itemsArr.length()) {
             val o = itemsArr.getJSONObject(i)
@@ -206,9 +237,13 @@ class VinaraaPlayerPlugin : Plugin() {
                 "all" -> Player.REPEAT_MODE_ALL
                 else -> Player.REPEAT_MODE_OFF
             }
-            p.setMediaItems(built, startIndex.coerceIn(0, built.size - 1), 0L)
+            p.setMediaItems(built, startIndex.coerceIn(0, built.size - 1), positionMs)
             p.prepare()
-            p.play()
+            if (autoPlay) {
+                p.play()
+            } else {
+                p.pause()
+            }
         }
         call.resolve()
     }
@@ -350,23 +385,27 @@ class VinaraaPlayerPlugin : Plugin() {
         val title = call.getString("title") ?: "Download"
         val fileName = call.getString("fileName") ?: "download.mp3"
 
-        try {
-            val request = android.app.DownloadManager.Request(Uri.parse(url))
-                .setTitle(title)
-                .setDescription("Downloading...")
-                .setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                .setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_MUSIC, fileName)
-                .setAllowedOverMetered(true)
-                .setAllowedOverRoaming(true)
+        activity?.runOnUiThread {
+            try {
+                val request = android.app.DownloadManager.Request(Uri.parse(url))
+                    .setTitle(title)
+                    .setDescription("Downloading $title...")
+                    .setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                    .setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_MUSIC, fileName)
+                    .setAllowedOverMetered(true)
+                    .setAllowedOverRoaming(true)
 
-            val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as android.app.DownloadManager
-            val downloadId = downloadManager.enqueue(request)
+                val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as android.app.DownloadManager
+                val downloadId = downloadManager.enqueue(request)
 
-            val ret = JSObject()
-            ret.put("downloadId", downloadId)
-            call.resolve(ret)
-        } catch (e: Exception) {
-            call.reject("Download failed", e)
+                val ret = JSObject().apply {
+                    put("downloadId", downloadId)
+                    put("status", "enqueued")
+                }
+                call.resolve(ret)
+            } catch (e: Exception) {
+                call.reject("Download failed: " + e.message, e)
+            }
         }
     }
 

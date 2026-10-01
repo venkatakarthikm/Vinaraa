@@ -4,8 +4,8 @@ import { music } from '@/api/endpoints';
 import { ChevronLeft, Play, Shuffle } from 'lucide-react';
 import { usePlayerStore } from '@/store/player';
 import { SongRowSkeleton } from '@/components/Skeleton';
-import MiniPlayer from '@/components/MiniPlayer';
-import { formatPlayerSong, getArtistsText } from '@/utils/song';
+import { formatPlayerSong } from '@/utils/song';
+import SongRow from '@/components/SongRow';
 
 export default function Album() {
   const { id } = useParams<{ id: string }>();
@@ -37,7 +37,7 @@ export default function Album() {
           )}
           <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-bg/60 to-bg" />
           <button onClick={() => navigate(-1)}
-            className="absolute top-4 left-4 p-2.5 rounded-full bg-black/40 backdrop-blur-sm"
+            className="absolute top-4 left-4 p-2.5 rounded-full bg-black/40 backdrop-blur-sm z-20"
             style={{ marginTop: 'env(safe-area-inset-top)' }}>
             <ChevronLeft size={22} className="text-white" />
           </button>
@@ -85,26 +85,19 @@ export default function Album() {
           )}
           <h2 className="text-text font-bold mb-3">Tracks</h2>
           {loading ? Array.from({ length: 8 }).map((_, i) => <SongRowSkeleton key={i} />) : (
-            album?.songs?.map((song: any, i: number) => (
-              <button key={song.id || song.saavnId} onClick={() => handlePlay(i)}
-                className="flex items-center gap-3 py-3 w-full">
-                <span className="w-8 text-center text-muted text-sm flex-shrink-0">{i + 1}</span>
-                <div className="flex-1 min-w-0 text-left">
-                  <p className="text-text text-sm font-semibold line-clamp-1">{song.name}</p>
-                  <p className="text-muted text-xs line-clamp-1">
-                    {getArtistsText(song)}
-                  </p>
-                </div>
-                <span className="text-muted text-xs flex-shrink-0">
-                  {song.durationMs ? `${Math.floor(song.durationMs / 60000)}:${String(Math.floor((song.durationMs % 60000) / 1000)).padStart(2, '0')}` : ''}
-                </span>
-              </button>
-            ))
+            <div className="flex flex-col gap-1">
+              {album?.songs?.map((song: any, i: number) => (
+                <SongRow
+                  key={song.id || song.saavnId || i}
+                  song={formatPlayerSong(song)}
+                  onPlay={() => handlePlay(i)}
+                />
+              ))}
+            </div>
           )}
         </div>
         <div className="h-4" />
       </div>
-      <MiniPlayer />
     </div>
   );
 }

@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { playlists } from '@/api/endpoints';
 import { Plus, Heart, Download, Music2, Users, ChevronRight, Play } from 'lucide-react';
 import { SongRowSkeleton } from '@/components/Skeleton';
-import MiniPlayer from '@/components/MiniPlayer';
 import { formatPlayerSong, getArtistsText } from '@/utils/song';
 import { getSongImage } from '@/utils/image';
 import { usePlayerStore } from '@/store/player';
 import { useUIStore } from '@/store/ui';
+import { getDownloadedSongs, type OfflineSong } from '@/utils/offline';
+import SongRow from '@/components/SongRow';
 
 const LIBRARY_TABS = ['Playlists', 'Liked', 'Downloads', 'Artists'];
 
@@ -89,8 +90,74 @@ function LikedTab() {
   );
 }
 
+function DownloadsTab() {
+  const [downloads, setDownloads] = useState<OfflineSong[]>([]);
+  const [loading, setLoading] = useState(true);
+  const setQueue = usePlayerStore((s) => s.setQueue);
+  const setShowPlayer = usePlayerStore((s) => s.setShowPlayer);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    getDownloadedSongs().then((list) => {
+      setDownloads(list);
+      setLoading(false);
+    });
+  }, []);
+
+  const handlePlay = (startIndex = 0) => {
+    if (!downloads.length) return;
+    const songs = downloads.map((s) => ({
+      id: s.id,
+      name: s.name,
+      artist: s.artist,
+      image: s.image,
+      durationMs: s.durationMs,
+      streamUrl: s.streamUrl,
+    }));
+    setQueue(songs, startIndex);
+    setShowPlayer(true);
+    navigate('/player');
+  };
+
+  if (loading) return <div>{Array.from({ length: 3 }).map((_, i) => <SongRowSkeleton key={i} />)}</div>;
+
+  if (!downloads.length) {
+    return (
+      <div className="text-center py-12 px-4">
+        <Download size={40} className="text-primary-soft mx-auto mb-3" />
+        <p className="text-muted">No downloaded songs found.</p>
+        <p className="text-muted/60 text-xs mt-1">Downloaded songs appear here for offline listening.</p>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="flex gap-3 px-5 mb-5 mt-2">
+        <button
+          onClick={() => handlePlay(0)}
+          className="flex-1 bg-gradient-to-r from-primary to-primary-soft text-white font-bold rounded-pill py-3 flex items-center justify-center gap-2 shadow-colored"
+        >
+          <Play size={18} fill="white" /> Play Offline Queue
+        </button>
+      </div>
+      <div className="flex flex-col gap-1 px-4">
+        {downloads.map((song, i) => (
+          <SongRow
+            key={song.id}
+            song={song}
+            onPlay={() => handlePlay(i)}
+          />
+        ))}
+      </div>
+    </>
+  );
+}
+
 export default function Library() {
-  const [activeTab, setActiveTab] = useState(0);
+  const location = useLocation();
+  const initialTab = (location.state as any)?.tab === 'downloads' || !navigator.onLine ? 2 : 0;
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [userPlaylists, setUserPlaylists] = useState<any[]>([]);
   const [systemPlaylists, setSystemPlaylists] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -135,7 +202,7 @@ export default function Library() {
       </div>
 
       <div className="flex-1 overflow-y-auto scroll-y pb-safe">
-        {loading && Array.from({ length: 5 }).map((_, i) => <SongRowSkeleton key={i} />)}
+        {loading && activeTab === 0 && Array.from({ length: 5 }).map((_, i) => <SongRowSkeleton key={i} />)}
         {!loading && activeTab === 0 && (
           <>
             {systemPlaylists.map((pl) => (
@@ -176,23 +243,15 @@ export default function Library() {
             )}
           </>
         )}
-        {!loading && activeTab === 1 && (
-          <LikedTab />
-        )}
-        {!loading && activeTab === 2 && (
-          <div className="text-center py-12 px-4">
-            <Download size={40} className="text-primary-soft mx-auto mb-3" />
-            <p className="text-muted">Downloaded songs appear here.</p>
-          </div>
-        )}
-        {!loading && activeTab === 3 && (
+        {activeTab === 1 && <LikedTab />}
+        {activeTab === 2 && <DownloadsTab />}
+        {activeTab === 3 && (
           <div className="text-center py-12 px-4">
             <Users size={40} className="text-mint mx-auto mb-3" />
             <p className="text-muted">Followed artists appear here.</p>
           </div>
         )}
       </div>
-      <MiniPlayer />
     </div>
   );
 }

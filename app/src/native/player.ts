@@ -2,6 +2,10 @@
 import { registerPlugin } from '@capacitor/core';
 
 export interface VinaraaPlayerPlugin {
+  /** Check if app was opened from media notification */
+  checkIntent(): Promise<{ openPlayer: boolean }>;
+  /** Check if active internet connection is available */
+  isOnline(): Promise<{ isOnline: boolean }>;
   /** Set auth tokens (called after login/refresh) */
   setAuth(options: { accessToken: string; refreshToken: string }): Promise<void>;
   /** Get current access token */
@@ -13,6 +17,8 @@ export interface VinaraaPlayerPlugin {
     items: { songId: string; streamUrl: string; title: string; artist: string; artwork?: string }[];
     startIndex: number;
     repeatMode: string;
+    positionMs?: number;
+    play?: boolean;
   }): Promise<void>;
   /** Pause playback */
   pause(): Promise<void>;
@@ -41,7 +47,7 @@ export interface VinaraaPlayerPlugin {
   /** Add event listener for player events */
   addListener(eventName: 'playbackStateChanged' | 'songChanged' | 'error' | 'nextTrack' | 'previousTrack', listenerFunc: (event: any) => void): Promise<{ remove: () => void }>;
   /** Download song natively */
-  download(options: { url: string; title?: string; fileName?: string }): Promise<{ downloadId: number }>;
+  download(options: { url: string; title?: string; fileName?: string }): Promise<{ downloadId: number; status?: string; localPath?: string; streamUrl?: string }>;
 }
 
 /**
