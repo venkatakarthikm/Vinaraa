@@ -44,7 +44,7 @@ export default function Register() {
         password,
         device: deviceInfo,
       });
-      await login(res.user, { accessToken: res.tokens.accessToken, refreshToken: res.tokens.refreshToken });
+      await login(res.user, { accessToken: res.tokens.accessToken });
       // Check onboarding
       if (!res.user?.onboarding?.completed) {
         navigate('/onboarding', { replace: true });

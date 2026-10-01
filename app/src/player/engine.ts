@@ -32,7 +32,7 @@ export function startPlayerEngine() {
       console.log(`[Player Engine] Streaming directly from CDN:`, song.streamUrl);
       
       // Start new tracking session
-      tracking.startSession(song.id || song.saavnId).then((res) => {
+      tracking.startSession((song as any).id || (song as any).saavnId).then((res) => {
         if (res?.sessionId) currentSessionId = res.sessionId;
       }).catch(() => {});
 

@@ -177,7 +177,8 @@ export default function FullPlayer() {
   const handleAddToPlaylist = async (playlistId?: string) => {
     if (!song) return;
     try {
-      const targetSongId = song.id || song.saavnId || song.songId;
+      const s = song as any;
+      const targetSongId = s.id || s.saavnId || s.songId;
       if (playlistId) {
         await playlists.saveSong({ songId: targetSongId, playlistId });
       } else {

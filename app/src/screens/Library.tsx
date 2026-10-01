@@ -26,7 +26,7 @@ function LikedTab() {
         setLiked(res?.tracks || []);
         setLoading(false);
       })
-      .catch((e) => {
+      .catch(() => {
         setError('Failed to load liked songs');
         setLoading(false);
       });

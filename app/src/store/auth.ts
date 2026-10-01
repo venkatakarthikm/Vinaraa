@@ -1,7 +1,7 @@
 // Updated auth store with persistent token storage
 import { create } from 'zustand';
 import { VinaraaPlayer } from '@/native/player';
-import { Preferences } from '@capacitor/preferences';
+
 
 interface AuthState {
   isAuthenticated: boolean;

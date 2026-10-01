@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useUIStore } from '@/store/ui';
 import { Home, Search, Library, BarChart2 } from 'lucide-react';
 import { springs } from '@/motion';
-import { AnimatePresence } from 'framer-motion';
+
 
 const tabs = [
   { id: 'home' as const, label: 'Home', icon: Home, path: '/home' },

@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { listStaggerVariants } from '@/motion';
 import { recommendations, music } from '@/api/endpoints';
 import { useAuthStore } from '@/store/auth';
 import { useUIStore } from '@/store/ui';
 import { useNavigate } from 'react-router-dom';
 import { CardSkeleton } from '@/components/Skeleton';
-import { Bell, Play, ChevronRight, Music2, Sparkles, Mic2, Film, Heart } from 'lucide-react';
+import { Bell, Play, ChevronRight, Music2, Sparkles, Mic2, Film } from 'lucide-react';
 import MiniPlayer from '@/components/MiniPlayer';
 import { getSongImage } from '@/utils/image';
 import { formatPlayerSong, getArtistsText } from '@/utils/song';
@@ -38,7 +38,7 @@ function HeroPick({ song, onPlay, contextQueue }: { song: any; onPlay: (s: any, 
       className="w-full relative h-64 rounded-3xl overflow-hidden shadow-2xl mb-8 group"
     >
       {getSongImage(song) ? (
-        <img src={getSongImage(song, '500x500')} alt={song.name} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+        <img src={getSongImage(song)} alt={song.name} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
       ) : (
         <div className="absolute inset-0 bg-surface-2 flex items-center justify-center"><Music2 size={48} className="text-muted" /></div>
       )}
@@ -266,7 +266,7 @@ export default function Home() {
                     return (
                       <motion.button
                         key={item.id} whileTap={{ scale: 0.95 }}
-                        onClick={() => handlePlay(item, rail.items.filter(x => x.type === 'song'))}
+                        onClick={() => handlePlay(item, rail.items.filter((x: any) => x.type === 'song'))}
                         className="flex flex-col gap-3 w-36 flex-shrink-0 group"
                       >
                         <div className="w-36 h-36 rounded-2xl overflow-hidden shadow-md relative">
