@@ -23,7 +23,7 @@ export function startPlayerEngine() {
     if (song && (song.id !== loadedId || s.queue !== prev.queue && song.id !== loadedId)) {
       // End previous session if it exists
       if (currentSessionId && prev.positionMs > 0) {
-        tracking.endSession(currentSessionId, prev.positionMs).catch(() => {});
+        tracking.endSession(currentSessionId, Math.round(prev.positionMs)).catch(() => {});
         currentSessionId = null;
       }
       
@@ -82,7 +82,7 @@ export function startPlayerEngine() {
       if (currentSessionId && n.positionMs - lastHeartbeatMs >= 10000) {
         lastHeartbeatMs = n.positionMs;
         tracking.heartbeat(currentSessionId, { 
-          positionMs: n.positionMs, 
+          positionMs: Math.round(n.positionMs), 
           state: st.getState().isPlaying ? 'playing' : 'paused' 
         }).catch(() => {});
       }
