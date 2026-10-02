@@ -46,7 +46,7 @@
   --c-primary: #09090B;
   --c-onp: #FFFFFF;
   --c-accent: #09090B;
-  --c-danger: #C62D3E;
+  --c-danger: #C62D4E;
   --c-success: #15803D;
   --glass: 0;
 }
@@ -293,4 +293,41 @@
 }
 .animate-drift-c {
   animation: driftC 44s ease-in-out infinite alternate;
+}
+
+@keyframes eqBar {
+  0%, 100% { transform: scaleY(0.25); }
+  50% { transform: scaleY(1); }
+}
+
+.animate-eq-1 { animation: eqBar 900ms ease-in-out infinite 0ms; }
+.animate-eq-2 { animation: eqBar 900ms ease-in-out infinite 200ms; }
+.animate-eq-3 { animation: eqBar 900ms ease-in-out infinite 400ms; }
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
+}
+
+.animate-shimmer {
+  animation: shimmer 1.4s linear infinite;
+}
+
+@keyframes ripple {
+  0% {
+    width: 0px;
+    height: 0px;
+    opacity: 0.36;
+    transform: translate(-50%, -50%);
+  }
+  100% {
+    width: 250px;
+    height: 250px;
+    opacity: 0;
+    transform: translate(-50%, -50%);
+  }
+}
+
+.animate-ripple {
+  animation: ripple 450ms ease-out forwards;
 }

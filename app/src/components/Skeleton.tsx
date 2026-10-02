@@ -1,38 +1,54 @@
-// Reusable skeleton loader with shimmer
+import { usePrefsStore } from '@/store/prefs';
+
 interface SkeletonProps {
   className?: string;
-  count?: number;
+  width?: number | string;
+  height?: number | string;
+  radius?: number | string;
 }
 
-export function Skeleton({ className = '', count = 1 }: SkeletonProps) {
+export function Skeleton({ className = '', width, height, radius }: SkeletonProps) {
+  const reduceEffects = usePrefsStore((s) => s.reduceEffects);
+
+  const style: React.CSSProperties = {
+    width: typeof width === 'number' ? `${width}px` : width,
+    height: typeof height === 'number' ? `${height}px` : height,
+    borderRadius: typeof radius === 'number' ? `${radius}px` : radius,
+  };
+
   return (
-    <>
-      {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className={`shimmer rounded-xl ${className}`} />
-      ))}
-    </>
+    <div
+      style={style}
+      className={`relative overflow-hidden bg-surface-2 ${className}`}
+    >
+      {!reduceEffects && (
+        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/8 to-transparent animate-shimmer" />
+      )}
+    </div>
   );
 }
 
 export function SongRowSkeleton() {
   return (
-    <div className="flex items-center gap-3 px-4 py-3">
-      <div className="shimmer w-12 h-12 rounded-xl flex-shrink-0" />
-      <div className="flex-1">
-        <div className="shimmer h-4 w-32 rounded mb-2" />
-        <div className="shimmer h-3 w-20 rounded" />
+    <div className="w-full h-[64px] px-5 flex items-center justify-between gap-3">
+      <Skeleton width={48} height={48} radius={12} />
+      <div className="flex-1 flex flex-col gap-2">
+        <Skeleton width="60%" height={16} radius={8} />
+        <Skeleton width="40%" height={12} radius={6} />
       </div>
-      <div className="shimmer h-3 w-8 rounded" />
+      <Skeleton width={32} height={12} radius={6} />
     </div>
   );
 }
 
-export function CardSkeleton() {
+export function MediaCardSkeleton() {
   return (
-    <div className="w-40 flex-shrink-0">
-      <div className="shimmer w-40 h-40 rounded-2xl mb-2" />
-      <div className="shimmer h-4 w-28 rounded mb-1" />
-      <div className="shimmer h-3 w-20 rounded" />
+    <div className="w-[132px] flex flex-col gap-2 flex-shrink-0">
+      <Skeleton width={132} height={132} radius={20} />
+      <Skeleton width="80%" height={14} radius={6} />
+      <Skeleton width="50%" height={12} radius={6} />
     </div>
   );
 }
+
+export { MediaCardSkeleton as CardSkeleton };
