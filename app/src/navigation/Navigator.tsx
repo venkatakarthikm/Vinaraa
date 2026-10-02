@@ -1,4 +1,3 @@
-// Navigator — seamless tab & page transitions
 import { Routes, Route, useLocation, Outlet } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 
@@ -23,15 +22,13 @@ import Offline from '@/screens/Offline';
 import NotFound from '@/screens/NotFound';
 import { BottomNav } from '@/components/BottomNav';
 import MiniPlayer from '@/components/MiniPlayer';
+import { ControlStripSlot } from '@/components/ControlStrip';
 import {
   tabTransitionVariants,
   pageTransitionVariants,
 } from '@/motion';
 
-// Which paths are main tabs (use fade-only transition; no slide)
 const TAB_PATHS = new Set(['/home', '/search', '/library', '/stats']);
-
-
 
 function AppShell() {
   const location = useLocation();
@@ -40,7 +37,6 @@ function AppShell() {
   return (
     <div className="flex flex-col h-full relative overflow-hidden">
       <div className="flex-1 relative overflow-hidden">
-        {/* Tab content — animate only the inner content, not the shell */}
         <AnimatePresence mode="sync" initial={false}>
           <motion.div
             key={location.pathname}
@@ -55,6 +51,7 @@ function AppShell() {
           </motion.div>
         </AnimatePresence>
       </div>
+      <ControlStripSlot />
       <MiniPlayer />
       <BottomNav />
     </div>
@@ -63,13 +60,19 @@ function AppShell() {
 
 export default function Navigator() {
   const location = useLocation();
-  const isAuthRoute = ['/', '/welcome', '/login', '/register',
-    '/forgot-password', '/reset-password', '/onboarding', '/player',
-  ].some(p => location.pathname === p || location.pathname.startsWith('/player'));
+  const isAuthRoute = [
+    '/',
+    '/welcome',
+    '/login',
+    '/register',
+    '/forgot-password',
+    '/reset-password',
+    '/onboarding',
+    '/player',
+  ].some((p) => location.pathname === p || location.pathname.startsWith('/player'));
 
   return (
-    <div className="relative w-full h-full overflow-hidden" style={{ background: 'var(--color-bg)' }}>
-      {/* Auth / Full-screen routes — fade transition, no shell chrome */}
+    <div className="relative w-full h-full overflow-hidden" style={{ background: 'var(--c-bg)' }}>
       {isAuthRoute && (
         <AnimatePresence mode="sync" initial={false}>
           <motion.div
@@ -96,7 +99,6 @@ export default function Navigator() {
         </AnimatePresence>
       )}
 
-      {/* Main app routes — AppShell provides its own AnimatePresence per child */}
       {!isAuthRoute && (
         <Routes location={location}>
           <Route element={<AppShell />}>
@@ -107,6 +109,7 @@ export default function Navigator() {
             <Route path="/album/:id" element={<Album />} />
             <Route path="/artist/:id" element={<Artist />} />
             <Route path="/playlist/:id" element={<PlaylistPage />} />
+            <Route path="/list/:kind" element={<Home />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/downloads" element={<Offline />} />

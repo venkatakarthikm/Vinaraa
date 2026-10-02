@@ -30,7 +30,7 @@ export default function FullPlayer() {
   const {
     isPlaying,
     repeat, shuffle, togglePlay, seekTo, nextTrack, previousTrack,
-    setRepeat, setShuffle, setShowPlayer, currentSong
+    setRepeat, setShuffle, currentSong
   } = usePlayerStore(
     useShallow((s) => ({
       isPlaying: s.isPlaying,
@@ -42,7 +42,6 @@ export default function FullPlayer() {
       previousTrack: s.previousTrack,
       setRepeat: s.setRepeat,
       setShuffle: s.setShuffle,
-      setShowPlayer: s.setShowPlayer,
       currentSong: s.currentSong,
     }))
   );
@@ -246,7 +245,7 @@ export default function FullPlayer() {
     return (
       <div className="flex flex-col h-full bg-bg items-center justify-center">
         <p className="text-muted">No song selected</p>
-        <button onClick={() => { setShowPlayer(false); navigate(-1); }} className="mt-4 text-primary-soft">Go Back</button>
+        <button onClick={() => { navigate(-1); }} className="mt-4 text-primary-soft">Go Back</button>
       </div>
     );
   }
@@ -261,14 +260,14 @@ export default function FullPlayer() {
       dragElastic={0.4}
       dragListener={false}
       dragControls={dragControls}
-      onDragEnd={(_, info) => { if (info.offset.y > 100) { setShowPlayer(false); navigate(-1); } }}
+      onDragEnd={(_, info) => { if (info.offset.y > 100) { navigate(-1); } }}
     >
       <div 
         className="flex items-center justify-between px-5 pt-4 pb-2"
         style={{ paddingTop: `calc(env(safe-area-inset-top) + 16px)` }}
         onPointerDown={(e) => dragControls.start(e)}
       >
-        <button onClick={() => { setShowPlayer(false); navigate(-1); }} className="p-2 -ml-2" aria-label="Close player">
+        <button onClick={() => { navigate(-1); }} className="p-2 -ml-2" aria-label="Close player">
           <ChevronDown size={28} className="text-text" />
         </button>
         <div className="w-12 h-1.5 bg-border rounded-full opacity-50 absolute left-1/2 -translate-x-1/2 top-4" />

@@ -1,14 +1,24 @@
-// Auth store with persistent token storage — no refresh tokens, unlimited session
 import { create } from 'zustand';
 import { VinaraaPlayer } from '@/native/player';
+import { useUIStore } from '@/store/ui';
+
+export interface User {
+  id: string;
+  name: string;
+  handle?: string;
+  email: string;
+  avatarUrl?: string;
+  preferences?: any;
+  onboarding?: any;
+}
 
 interface AuthState {
   isAuthenticated: boolean;
-  user: any | null;
-  login: (user: any, tokens: { accessToken: string }) => Promise<void>;
+  user: User | null;
+  login: (user: User, tokens: { accessToken: string }) => Promise<void>;
   logout: (options?: { reason?: string }) => Promise<void>;
   checkAuth: () => Promise<void>;
-  updateUser: (user: any) => void;
+  updateUser: (user: User) => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -22,7 +32,6 @@ export const useAuthStore = create<AuthState>((set) => ({
       console.warn('VinaraaPlayer native plugin not available, storing in localStorage');
       localStorage.setItem('mockAccessToken', tokens.accessToken);
     }
-    // Always store user so checkAuth can restore it
     localStorage.setItem('vinaraaUser', JSON.stringify(user));
     set({ isAuthenticated: true, user });
   },
@@ -36,8 +45,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     localStorage.removeItem('vinaraaUser');
     set({ isAuthenticated: false, user: null });
     
-    if (options?.reason && typeof window !== 'undefined') {
-      alert(options.reason); // For now alert, can be changed to toast later
+    if (options?.reason) {
+      useUIStore.getState().addToast(options.reason, 'info');
     }
   },
 
@@ -53,14 +62,16 @@ export const useAuthStore = create<AuthState>((set) => ({
 
       if (token && token.length > 0) {
         const storedUser = localStorage.getItem('vinaraaUser');
-        const user = storedUser ? JSON.parse(storedUser) : { name: 'User' };
-        set({ isAuthenticated: true, user });
+        const user = storedUser ? JSON.parse(storedUser) : null;
+        if (user) {
+          set({ isAuthenticated: true, user });
+        }
 
         if (navigator.onLine) {
           try {
             const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://vinaraa.onrender.com/api/v1';
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 3000);
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
             const res = await fetch(`${API_BASE}/users/me`, {
               headers: { Authorization: `Bearer ${token}` },
               signal: controller.signal
@@ -69,9 +80,10 @@ export const useAuthStore = create<AuthState>((set) => ({
             
             if (res.ok) {
               const json = await res.json();
-              if (json.success && json.data) {
-                localStorage.setItem('vinaraaUser', JSON.stringify(json.data));
-                set({ user: json.data });
+              const profile = json?.data?.user ?? json?.data;
+              if (profile?.name) {
+                localStorage.setItem('vinaraaUser', JSON.stringify(profile));
+                set({ isAuthenticated: true, user: profile });
               }
             } else {
               const json = await res.json();
@@ -93,7 +105,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         });
       }
     } catch (_e) {
-      console.warn('[Auth] checkAuth encountered an error, keeping current state:', _e);
+      console.warn('[Auth] checkAuth encountered an error:', _e);
     }
   },
 

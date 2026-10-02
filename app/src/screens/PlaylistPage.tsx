@@ -15,7 +15,6 @@ export default function PlaylistPage() {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const setQueue = usePlayerStore((s) => s.setQueue);
-  const setShowPlayer = usePlayerStore((s) => s.setShowPlayer);
 
   useEffect(() => {
     if (!id) return;
@@ -39,7 +38,6 @@ export default function PlaylistPage() {
   const handlePlay = (startIndex = 0) => {
     if (!songs.length) return;
     setQueue(songs.map((s: any) => formatPlayerSong(s)), startIndex);
-    setShowPlayer(true);
     navigate('/player');
   };
 

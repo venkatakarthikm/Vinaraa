@@ -3,12 +3,17 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
 
-// Import fonts so they work offline
-import '@fontsource/plus-jakarta-sans/400.css';
-import '@fontsource/plus-jakarta-sans/600.css';
-import '@fontsource/plus-jakarta-sans/800.css';
-import '@fontsource/noto-sans-telugu/400.css';
-import '@fontsource/noto-sans-telugu/600.css';
+// Import Anek variable fonts for Indic & Latin scripts (works offline in APK)
+import '@fontsource-variable/anek-latin';
+import '@fontsource-variable/anek-devanagari';
+import '@fontsource-variable/anek-telugu';
+import '@fontsource-variable/anek-tamil';
+import '@fontsource-variable/anek-kannada';
+import '@fontsource-variable/anek-malayalam';
+import '@fontsource-variable/anek-bangla';
+import '@fontsource-variable/anek-gujarati';
+import '@fontsource-variable/anek-gurmukhi';
+import '@fontsource-variable/anek-odia';
 
 const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement);
 root.render(

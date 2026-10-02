@@ -33,7 +33,6 @@ interface PlayerState {
   durationMs: number;
   repeat: RepeatMode;
   shuffle: boolean;
-  showPlayer: boolean;
   showQueue: boolean;
   sessionId: string | null;
   seekRequestMs: number | null;
@@ -52,7 +51,6 @@ interface PlayerState {
   setShuffle: (shuffle: boolean) => void;
   nextTrack: () => void;
   previousTrack: () => void;
-  setShowPlayer: (show: boolean) => void;
   setShowQueue: (show: boolean) => void;
   setSessionId: (id: string | null) => void;
   currentSong: () => Song | null;
@@ -69,7 +67,6 @@ export const usePlayerStore = create<PlayerState>()(
       durationMs: 0,
       repeat: 'all',
       shuffle: false,
-      showPlayer: false,
       showQueue: false,
       sessionId: null,
       seekRequestMs: null,
@@ -114,7 +111,6 @@ export const usePlayerStore = create<PlayerState>()(
           return;
         }
         
-        // Dedup check
         const existingIdx = queue.findIndex((q, i) => i > currentIndex && q.id === s.id);
         const updated = [...queue];
         if (existingIdx !== -1) {
@@ -165,7 +161,6 @@ export const usePlayerStore = create<PlayerState>()(
           VinaraaPlayer.previous().catch(console.error);
         });
       },
-      setShowPlayer: (show) => set({ showPlayer: show }),
       setShowQueue: (show) => set({ showQueue: show }),
       setSessionId: (id) => set({ sessionId: id }),
       currentSong: () => {

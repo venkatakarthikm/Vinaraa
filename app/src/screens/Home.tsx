@@ -180,7 +180,6 @@ export default function Home() {
     const queue = contextQueue.map(formatPlayerSong);
     const startIndex = queue.findIndex(s => s.id === (song.id || song.saavnId));
     usePlayerStore.getState().setQueue(queue, startIndex >= 0 ? startIndex : 0);
-    usePlayerStore.getState().setShowPlayer(true);
     navigate(`/player/${queue[startIndex >= 0 ? startIndex : 0].id}`, { state: { song } });
   };
 

@@ -34,19 +34,13 @@ export function startPlayerEngine() {
   };
   checkNotificationIntent();
   
-  // We don't push queue to native on startup. We wait for play toggle (nativeLoaded).
   App.addListener('appStateChange', ({ isActive }) => {
     if (isActive) checkNotificationIntent();
   });
-  window.addEventListener('openPlayerIntent', () => {
-    st.getState().setShowPlayer(true);
-  });
 
-  // 1) JS store → native player
   st.subscribe(async (s, prev) => {
     const song = s.queue[s.currentIndex];
 
-    // A) Queue or current song changed
     if (song && (song.id !== loadedId || queueVersion !== lastQueueVersion)) {
       loadedId = song.id;
       lastQueueVersion = queueVersion;
@@ -65,7 +59,6 @@ export function startPlayerEngine() {
         positionMs: s.positionMs,
         play: s.isPlaying || s.desiredPlaying,
       }).catch(() => {
-        // Fallback to single play if setQueue fails
         VinaraaPlayer.play({
           songId: song.id,
           streamUrl: song.streamUrl!,
@@ -78,7 +71,6 @@ export function startPlayerEngine() {
       return;
     }
 
-    // B) Play state toggled
     if (song && s.desiredPlaying !== prev.desiredPlaying) {
       if (s.desiredPlaying) {
         if (!nativeLoaded) {
@@ -106,13 +98,11 @@ export function startPlayerEngine() {
       }
     }
 
-    // C) Seek requested
     if (s.seekRequestMs != null && s.seekRequestMs !== prev.seekRequestMs) {
       await VinaraaPlayer.seekTo({ positionMs: s.seekRequestMs });
       s.clearSeek();
     }
 
-    // D) Pre-fetch when near end of queue
     if (s.queue.length - s.currentIndex <= 2 && !fetchingMore && s.queue.length > 0) {
       fetchingMore = true;
       const cur = s.queue[s.queue.length - 1];
@@ -143,7 +133,7 @@ export function startPlayerEngine() {
 
   VinaraaPlayer.addListener('progress', (e: any) => {
     consecutiveErrors = 0;
-    if (!e.songId || e.songId !== loadedId) return; // Stale progress
+    if (!e.songId || e.songId !== loadedId) return;
     if (st.getState().seekRequestMs == null) {
       useProgressStore.setState({
         positionMs: e.positionMs,
@@ -192,8 +182,6 @@ export function startPlayerEngine() {
   VinaraaPlayer.addListener('previousTrack', () => {
     st.getState().previousTrack();
   });
-
-  // Removed blind polling
 }
 
 function onEnded() {
