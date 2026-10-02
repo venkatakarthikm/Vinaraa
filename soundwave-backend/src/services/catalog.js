@@ -323,6 +323,129 @@ async function searchGeneric(kind, query, { page = 0, limit = 20 } = {}) {
   return { ...value, stale: Boolean(stale) };
 }
 
+/* ── Autocomplete normalizers ────────────────────────────────────────────── */
+
+function normalizeAutocompleteAlbum(raw) {
+  if (!raw || !raw.id) return null;
+  const year = raw.more_info?.year || (raw.description ? (raw.description.match(/\b(19|20)\d{2}\b/)?.[0]) : undefined);
+  const language = raw.more_info?.language || undefined;
+  const songCount = raw.more_info?.song_pids ? raw.more_info.song_pids.split(',').map(s => s.trim()).filter(Boolean).length : undefined;
+  const rawImg = raw.image || '';
+  const imgUrl = rawImg ? rawImg.replace('-50x50', '-500x500') : '';
+  const nameDecoded = decode(raw.title || raw.name) || 'Unknown Album';
+
+  return {
+    id: String(raw.id),
+    name: nameDecoded,
+    title: nameDecoded,
+    subtitle: raw.description ? decode(raw.description) : undefined,
+    type: 'album',
+    year: year ? String(year) : undefined,
+    language,
+    songCount,
+    image: imgUrl || maxQualityImage([{ quality: '500x500', url: imgUrl }]),
+    artwork: {
+      small: imgUrl ? imgUrl.replace('-500x500', '-50x50') : '',
+      medium: imgUrl ? imgUrl.replace('-500x500', '-150x150') : '',
+      large: imgUrl,
+    },
+    url: raw.url || undefined,
+  };
+}
+
+function normalizeAutocompleteSong(raw) {
+  if (!raw || !raw.id) return null;
+  const rawImg = raw.image || '';
+  const imgUrl = rawImg ? rawImg.replace('-50x50', '-500x500') : '';
+  const nameDecoded = decode(raw.title || raw.name) || 'Unknown';
+  const singersText = raw.more_info?.singers || raw.more_info?.primary_artists || raw.description || '';
+
+  return {
+    id: String(raw.id),
+    saavnId: String(raw.id),
+    name: nameDecoded,
+    title: nameDecoded,
+    subtitle: raw.description ? decode(raw.description) : undefined,
+    artistsText: decode(singersText),
+    singers: (singersText || '').split(',').map(s => ({ id: '', name: decode(s.trim()) })).filter(x => x.name),
+    language: raw.more_info?.language || undefined,
+    album: raw.album ? { id: '', name: decode(raw.album), movieName: decode(raw.album) } : undefined,
+    image: imgUrl || maxQualityImage([{ quality: '500x500', url: imgUrl }]),
+    artwork: {
+      small: imgUrl ? imgUrl.replace('-500x500', '-50x50') : '',
+      medium: imgUrl ? imgUrl.replace('-500x500', '-150x150') : '',
+      large: imgUrl,
+    },
+    url: raw.url || undefined,
+    audio: {
+      best: raw.more_info?.vlink || undefined,
+      requiresAuth: true,
+      canDownload: true,
+    },
+  };
+}
+
+function normalizeAutocompleteArtist(raw) {
+  if (!raw || !raw.id) return null;
+  const rawImg = raw.image || '';
+  const imgUrl = rawImg ? rawImg.replace('-50x50', '-500x500') : '';
+  const nameDecoded = decode(raw.title || raw.name) || 'Unknown Artist';
+  return {
+    id: String(raw.id),
+    name: nameDecoded,
+    title: nameDecoded,
+    type: 'artist',
+    role: raw.description ? decode(raw.description) : (raw.extra || 'Artist'),
+    image: imgUrl || maxQualityImage([{ quality: '500x500', url: imgUrl }]),
+  };
+}
+
+function normalizeAutocompletePlaylist(raw) {
+  if (!raw || !raw.id) return null;
+  const rawImg = raw.image || '';
+  const imgUrl = rawImg ? rawImg.replace('-50x50', '-500x500') : '';
+  const nameDecoded = decode(raw.title || raw.name) || 'Unknown Playlist';
+  return {
+    id: String(raw.id),
+    name: nameDecoded,
+    title: nameDecoded,
+    type: 'playlist',
+    image: imgUrl || maxQualityImage([{ quality: '500x500', url: imgUrl }]),
+  };
+}
+
+async function autocomplete(query) {
+  const q = String(query || '').trim();
+  if (!q) return { albums: [], songs: [], artists: [], playlists: [] };
+
+  const { value, stale } = await cache.swr('autocomplete', q.toLowerCase(), env.CACHE_TTL_SEARCH || 300, async () => {
+    const { data } = await saavn.autocomplete(q);
+    const d = data || {};
+    const albums = (d.albums?.data || []).map(normalizeAutocompleteAlbum).filter(Boolean);
+    const songs = (d.songs?.data || []).map(normalizeAutocompleteSong).filter(Boolean);
+    const artists = (d.artists?.data || []).map(normalizeAutocompleteArtist).filter(Boolean);
+    const playlists = (d.playlists?.data || []).map(normalizeAutocompletePlaylist).filter(Boolean);
+
+    if (albums.length) {
+      const entityOps = albums.map((a) => ({
+        updateOne: {
+          filter: { type: 'album', entityId: a.id },
+          update: {
+            $set: { name: a.name, subtitle: a.year, language: a.language, image: a.image, songCount: a.songCount, lastFetchedAt: new Date() },
+            $setOnInsert: { metrics: { popularity: 0 } },
+          },
+          upsert: true,
+        },
+      }));
+      Entity.bulkWrite(entityOps, { ordered: false }).catch(() => {});
+    }
+
+    return { albums, songs, artists, playlists };
+  }, 'autocomplete');
+
+  return { ...value, stale: Boolean(stale) };
+}
+
 async function getAlbum(id, { page = 0 } = {}) {
   const { value, stale } = await cache.swr('album', { id, page }, env.CACHE_TTL_ENTITY, async () => {
     const { data, upstream } = await saavn.albumById(id);
@@ -455,6 +578,11 @@ async function refreshStaleSongs(limit = 25) {
 module.exports = {
   decode,
   normalizeSong,
+  normalizeAutocompleteAlbum,
+  normalizeAutocompleteSong,
+  normalizeAutocompleteArtist,
+  normalizeAutocompletePlaylist,
+  autocomplete,
   toClientSong,
   persistSongs,
   getSong,

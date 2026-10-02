@@ -21,7 +21,7 @@
 
     <style name="AppTheme.Splash" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/vinaraa_bg</item>
-        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_logo</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/vinaraa</item>
         <item name="postSplashScreenTheme">@style/AppTheme</item>
     </style>
 </resources>

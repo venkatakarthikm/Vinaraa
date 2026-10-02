@@ -16,6 +16,8 @@ import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
 import com.google.common.util.concurrent.ListenableFuture
+import okio.buffer
+import okio.sink
 
 @CapacitorPlugin(name = "VinaraaPlayer")
 class VinaraaPlayerPlugin : Plugin() {
@@ -407,11 +409,6 @@ class VinaraaPlayerPlugin : Plugin() {
 
     @PluginMethod
     fun appReady(call: PluginCall) {
-        call.resolve()
-    }
-
-    @PluginMethod
-    fun appReady(call: PluginCall) {
         onAppReady?.invoke()
         call.resolve()
     }
@@ -572,7 +569,7 @@ class VinaraaPlayerPlugin : Plugin() {
                     if (musicDir != null && !musicDir.exists()) musicDir.mkdirs()
                     
                     val file = java.io.File(musicDir, fileName)
-                    val sink = okio.Okio.buffer(okio.Okio.sink(file))
+                    val sink = file.sink().buffer()
                     sink.writeAll(response.body!!.source())
                     sink.close()
                     response.close()

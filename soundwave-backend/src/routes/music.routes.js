@@ -19,6 +19,27 @@ const router = express.Router();
 /** Public browse endpoints work anonymously; personalised ones use optionalAuth. */
 router.use(optionalAuth);
 
+function mergeByStableId(primaryList = [], secondaryList = []) {
+  const map = new Map();
+
+  for (const item of primaryList) {
+    if (!item) continue;
+    const id = String(item.id || item.saavnId || '');
+    if (id) map.set(id, item);
+  }
+
+  for (const item of secondaryList) {
+    if (!item) continue;
+    const id = String(item.id || item.saavnId || '');
+    if (id) {
+      const existing = map.get(id);
+      map.set(id, existing ? { ...existing, ...item } : item);
+    }
+  }
+
+  return [...map.values()];
+}
+
 /**
  * Unified search. type=all fans out to the four upstream scopes in parallel and
  * returns one payload — the app renders four sections from a single request.
@@ -41,76 +62,186 @@ router.get(
 
     if (type !== 'all') {
       if (type === 'songs') {
-        const result = await catalog.searchSongs(q, { page, limit, language });
+        const [workerResult, autoRes] = await Promise.allSettled([
+          catalog.searchSongs(q, { page, limit, language }),
+          page === 0 ? catalog.autocomplete(q) : Promise.resolve(null),
+        ]);
+
+        const result = workerResult.status === 'fulfilled' ? workerResult.value : { results: [], total: 0 };
         await record();
-        const songs = await Song.find({ saavnId: { $in: (result.results || []).map((r) => String(r.id)).filter(Boolean) } }).lean();
+
+        const workerRawSongs = result.results || [];
+        const songs = await Song.find({ saavnId: { $in: workerRawSongs.map((r) => String(r.id)).filter(Boolean) } }).lean();
         const map = new Map(songs.map((x) => [x.saavnId, x]));
-        const items = (result.results || []).map((r) => {
+        const workerItems = workerRawSongs.map((r) => {
           const local = map.get(String(r.id));
           return local ? catalog.toClientSong(local) : catalog.toClientSong(catalog.normalizeSong(r));
         });
-        
+
         // Persist the upstream ones
-        const upstreamRaw = (result.results || []).filter(r => !map.has(String(r.id)));
+        const upstreamRaw = workerRawSongs.filter(r => !map.has(String(r.id)));
         if (upstreamRaw.length) {
           catalog.persistSongs(upstreamRaw).catch(() => {});
         }
-        
-        return paginated(res, items, { page, limit, total: result.total || items.length, extra: { scope: 'songs', stale: result.stale, upstream: result.upstream } });
+
+        const autoSongs = (autoRes.status === 'fulfilled' && autoRes.value) ? autoRes.value.songs : [];
+        const mergedItems = page === 0 ? mergeByStableId(autoSongs, workerItems) : workerItems;
+
+        return paginated(res, mergedItems, { page, limit, total: result.total || mergedItems.length, extra: { scope: 'songs', stale: result.stale, upstream: result.upstream } });
       }
-      const result = await catalog.searchGeneric(type, q, { page, limit });
+
+      const [workerResult, autoRes] = await Promise.allSettled([
+        catalog.searchGeneric(type, q, { page, limit }),
+        page === 0 ? catalog.autocomplete(q) : Promise.resolve(null),
+      ]);
+
+      const result = workerResult.status === 'fulfilled' ? workerResult.value : { results: [], total: 0 };
       await record();
-      return paginated(res, result.results || [], { page, limit, total: result.total || 0, extra: { scope: type, stale: result.stale } });
+
+      const workerRaw = result.results || [];
+      const workerItems = workerRaw.map((r) => {
+        if (!r) return null;
+        if (type === 'albums') {
+          return {
+            id: String(r.id),
+            name: catalog.decode(r.name || r.title) || 'Unknown Album',
+            title: catalog.decode(r.name || r.title) || 'Unknown Album',
+            year: r.year ? String(r.year) : undefined,
+            language: r.language || undefined,
+            songCount: r.songCount || (r.songs ? r.songs.length : undefined),
+            image: catalog.maxQualityImage(r.image || []),
+            artwork: {
+              small: catalog.imageByQuality(r.image || [], '50x50'),
+              medium: catalog.imageByQuality(r.image || [], '150x150'),
+              large: catalog.imageByQuality(r.image || [], '500x500'),
+            },
+            url: r.url || undefined,
+          };
+        }
+        if (type === 'artists') {
+          return {
+            id: String(r.id),
+            name: catalog.decode(r.name || r.title) || 'Unknown Artist',
+            title: catalog.decode(r.name || r.title) || 'Unknown Artist',
+            type: 'artist',
+            role: r.role || r.description || 'Artist',
+            image: catalog.maxQualityImage(r.image || []),
+          };
+        }
+        if (type === 'playlists') {
+          return {
+            id: String(r.id),
+            name: catalog.decode(r.name || r.title) || 'Unknown Playlist',
+            title: catalog.decode(r.name || r.title) || 'Unknown Playlist',
+            type: 'playlist',
+            image: catalog.maxQualityImage(r.image || []),
+          };
+        }
+        return r;
+      }).filter(Boolean);
+
+      const autoData = (autoRes.status === 'fulfilled' && autoRes.value) ? autoRes.value : {};
+      const autoItems = autoData[type] || [];
+      const mergedItems = page === 0 ? mergeByStableId(autoItems, workerItems) : workerItems;
+
+      return paginated(res, mergedItems, { page, limit, total: Math.max(result.total || 0, mergedItems.length), extra: { scope: type, stale: result.stale } });
     }
 
-    const [songs, albums, artists, playlists] = await Promise.allSettled([
+    const [songs, albums, artists, playlists, autoRes] = await Promise.allSettled([
       catalog.searchSongs(q, { page, limit, language }),
       catalog.searchGeneric('albums', q, { page, limit: Math.min(limit, 10) }),
       catalog.searchGeneric('artists', q, { page, limit: Math.min(limit, 10) }),
       catalog.searchGeneric('playlists', q, { page, limit: Math.min(limit, 10) }),
+      catalog.autocomplete(q),
     ]);
     await record();
-    
+
     if (songs.status === 'fulfilled' && songs.value.results?.length) {
       catalog.persistSongs(songs.value.results).catch(() => {});
     }
 
     const unwrap = (r, key) => (r.status === 'fulfilled' ? r.value[key] : []);
     const failures = [songs, albums, artists, playlists].filter((r) => r.status === 'rejected').length;
-    if (failures === 4) throw AppError.upstream('Search is temporarily unavailable — all upstream hosts failed', { query: q });
+    if (failures === 4 && autoRes.status !== 'fulfilled') throw AppError.upstream('Search is temporarily unavailable — all upstream hosts failed', { query: q });
+
+    const autoData = autoRes.status === 'fulfilled' ? autoRes.value : { songs: [], albums: [], artists: [], playlists: [] };
+    const workerSongs = unwrap(songs, 'results').map((r) => catalog.toClientSong(catalog.normalizeSong(r)));
+    const workerAlbums = unwrap(albums, 'results');
+    const workerArtists = unwrap(artists, 'results');
+    const workerPlaylists = unwrap(playlists, 'results');
 
     return ok(res, {
       query: q,
-      songs: unwrap(songs, 'results').map((r) => catalog.toClientSong(catalog.normalizeSong(r))),
-      albums: unwrap(albums, 'results'),
-      artists: unwrap(artists, 'results'),
-      playlists: unwrap(playlists, 'results'),
+      songs: mergeByStableId(autoData.songs || [], workerSongs),
+      albums: mergeByStableId(autoData.albums || [], workerAlbums),
+      artists: mergeByStableId(autoData.artists || [], workerArtists),
+      playlists: mergeByStableId(autoData.playlists || [], workerPlaylists),
       partial: failures > 0,
     });
   })
 );
 
-/** Type-ahead suggestions: local catalogue first (instant, offline-safe). */
+/** Type-ahead suggestions: local catalogue + JioSaavn autocomplete. */
 router.get(
   '/search/suggestions',
   asyncHandler(async (req, res) => {
     const q = String(req.query.q || '').trim();
     if (q.length < 2) return ok(res, { query: q, suggestions: [] });
+
     const rx = { $regex: q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
-    const [songs, entities] = await Promise.all([
-      Song.find({ name: rx }).sort({ 'metrics.trendingScore': -1, playCount: -1 }).limit(8).select('saavnId name images artists singers durationMs album language').lean(),
-      require('../models/Entity').find({ name: rx }).sort({ 'metrics.popularity': -1 }).limit(6).select('entityId name type image').lean(),
+    const [historyRes, localSongsRes, localEntitiesRes, autoRes] = await Promise.allSettled([
+      req.user ? SearchHistory.find({ user: req.user._id, query: rx }).sort({ createdAt: -1 }).limit(5).lean() : Promise.resolve([]),
+      Song.find({ name: rx }).sort({ 'metrics.trendingScore': -1, playCount: -1 }).limit(5).select('saavnId name images singers album').lean(),
+      require('../models/Entity').find({ name: rx }).sort({ 'metrics.popularity': -1 }).limit(5).select('entityId name type image').lean(),
+      catalog.autocomplete(q),
     ]);
-    const history = req.user
-      ? await SearchHistory.find({ user: req.user._id, query: rx }).sort({ createdAt: -1 }).limit(5).lean()
-      : [];
+
+    const suggestions = [];
+    const seen = new Set();
+
+    const add = (item) => {
+      const key = `${item.type}-${item.id || item.text}`.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        suggestions.push(item);
+      }
+    };
+
+    if (historyRes.status === 'fulfilled' && historyRes.value) {
+      for (const h of historyRes.value) {
+        add({ type: 'history', text: h.query });
+      }
+    }
+
+    if (autoRes.status === 'fulfilled' && autoRes.value) {
+      const ac = autoRes.value;
+      for (const a of (ac.albums || [])) add({ type: 'album', id: a.id, text: a.name, subtitle: `Album ${a.year ? `· ${a.year}` : ''}`, image: a.image });
+      for (const s of (ac.songs || [])) add({ type: 'song', id: s.id, text: s.name, subtitle: s.artistsText, image: s.image });
+      for (const a of (ac.artists || [])) add({ type: 'artist', id: a.id, text: a.name, subtitle: a.role, image: a.image });
+      for (const p of (ac.playlists || [])) add({ type: 'playlist', id: p.id, text: p.name, subtitle: 'Playlist', image: p.image });
+    }
+
+    if (localSongsRes.status === 'fulfilled' && localSongsRes.value) {
+      for (const x of localSongsRes.value) {
+        add({
+          type: 'song',
+          id: x.saavnId,
+          text: x.name,
+          subtitle: (x.singers || []).map((s) => s.name).join(', '),
+          image: catalog.maxQualityImage(x.images || []),
+        });
+      }
+    }
+
+    if (localEntitiesRes.status === 'fulfilled' && localEntitiesRes.value) {
+      for (const e of localEntitiesRes.value) {
+        add({ type: e.type, id: e.entityId, text: e.name, image: e.image });
+      }
+    }
+
     return ok(res, {
       query: q,
-      suggestions: [
-        ...history.map((h) => ({ type: 'history', text: h.query })),
-        ...songs.map((x) => ({ type: 'song', id: x.saavnId, text: x.name, subtitle: (x.singers || []).map((a) => a.name).join(', '), image: x.images?.[x.images.length - 1]?.url })),
-        ...entities.map((e) => ({ type: e.type, id: e.entityId, text: e.name, image: e.image })),
-      ],
+      suggestions,
     });
   })
 );
@@ -243,19 +374,35 @@ router.get(
     const page = Number(req.query.page) || 0;
     const songCount = Number(req.query.songCount) || 50;
     const albumCount = Number(req.query.albumCount) || 50;
-    
+    const artistId = String(req.params.id);
+
     // The upstream has a known bug returning plain text for some artist ids —
     // fall back to our own catalogue so this endpoint never 500s.
-    const localEntity = await require('../models/Entity').findOne({ entityId: String(req.params.id) }).lean();
-    const localSongs = await Song.find({ $or: [{ 'singers.id': String(req.params.id) }, { 'musicDirectors.id': String(req.params.id) }] })
+    const localEntity = await require('../models/Entity').findOne({ entityId: artistId }).lean();
+    const localSongs = await Song.find({
+      $or: [
+        { 'singers.id': artistId },
+        { 'musicDirectors.id': artistId },
+        { 'actors.id': artistId },
+        { 'artists.id': artistId },
+      ],
+    })
       .sort({ 'metrics.trendingScore': -1, playCount: -1 })
       .limit(songCount)
       .lean();
 
+    const localAlbums = await require('../models/Entity').find({
+      type: 'album',
+      $or: [
+        { entityId: { $in: localSongs.map(s => s.album?.id).filter(Boolean) } },
+        { 'artists.id': artistId }
+      ]
+    }).limit(albumCount).lean();
+
     let upstreamArtist = null;
     let stale = false;
     try {
-      const result = await catalog.getArtist(req.params.id, { page, songCount, albumCount });
+      const result = await catalog.getArtist(artistId, { page, songCount, albumCount });
       upstreamArtist = result.artist;
       stale = result.stale;
     } catch (err) {
@@ -266,8 +413,44 @@ router.get(
     const upstreamPool = [...(upstreamArtist?.topSongs || []), ...(upstreamArtist?.singles || [])];
     const normalizedPool = upstreamPool.map((r) => catalog.normalizeSong(r)).filter(Boolean);
 
+    const albumMap = new Map();
+    for (const a of (upstreamArtist?.topAlbums || [])) {
+      if (a?.id) {
+        albumMap.set(String(a.id), {
+          id: String(a.id),
+          name: catalog.decode(a.name),
+          year: a.year ? String(a.year) : undefined,
+          image: catalog.maxQualityImage(a.image || []),
+          songCount: a.songCount || a.songs?.length || 0,
+        });
+      }
+    }
+    for (const la of localAlbums) {
+      const aid = String(la.entityId);
+      if (aid && !albumMap.has(aid)) {
+        albumMap.set(aid, {
+          id: aid,
+          name: catalog.decode(la.name),
+          year: la.subtitle ? String(la.subtitle) : undefined,
+          image: la.image || '',
+          songCount: la.songCount || 0,
+        });
+      }
+    }
+    for (const ls of localSongs) {
+      if (ls.album?.id && !albumMap.has(String(ls.album.id))) {
+        albumMap.set(String(ls.album.id), {
+          id: String(ls.album.id),
+          name: catalog.decode(ls.album.name),
+          year: ls.album.year ? String(ls.album.year) : undefined,
+          image: catalog.maxQualityImage(ls.images || []),
+          songCount: ls.album.songCount || 0,
+        });
+      }
+    }
+
     return ok(res, {
-      id: String(req.params.id),
+      id: artistId,
       name: catalog.decode(upstreamArtist?.name || localEntity?.name || ''),
       role: upstreamArtist?.role || localEntity?.role,
       image: catalog.maxQualityImage(upstreamArtist?.image || []) || localEntity?.image,
@@ -275,7 +458,7 @@ router.get(
       bio: upstreamArtist?.bio || localEntity?.description,
       topSongs: [...merged.values()].map((x) => catalog.toClientSong(x)),
       upstreamTopSongs: normalizedPool.map((x) => catalog.toClientSong(x)),
-      albums: (upstreamArtist?.topAlbums || []).map((a) => ({ id: String(a.id), name: catalog.decode(a.name), year: a.year, image: catalog.maxQualityImage(a.image || []), songCount: a.songCount })),
+      albums: [...albumMap.values()],
       source: upstreamArtist ? 'upstream+catalogue' : 'catalogue',
       stale,
     });

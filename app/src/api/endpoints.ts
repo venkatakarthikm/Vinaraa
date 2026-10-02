@@ -64,11 +64,12 @@ export const onboarding = {
 
 // ── Music ──────────────────────────────────────────────────────────────────
 export const music = {
-  search: (params: { q: string; type?: string; page?: number; limit?: number; language?: string }) => {
+  search: (params: { q: string; type?: string; page?: number; limit?: number; language?: string }, options?: { signal?: AbortSignal }) => {
     const qs = new URLSearchParams(params as any).toString();
-    return apiClient<any>(`/music/search?${qs}`);
+    return apiClient<any>(`/music/search?${qs}`, { signal: options?.signal });
   },
-  suggestions: (q: string) => apiClient<any>(`/music/search/suggestions?q=${encodeURIComponent(q)}`),
+  suggestions: (q: string, options?: { signal?: AbortSignal }) =>
+    apiClient<any>(`/music/search/suggestions?q=${encodeURIComponent(q)}`, { signal: options?.signal }),
   song: (id: string) => apiClient<any>(`/music/songs/${id}`),
   songs: (ids: string[]) => apiClient<any>(`/music/songs?ids=${ids.join(',')}`),
   lyrics: (id: string) => apiClient<any>(`/music/songs/${id}/lyrics`),

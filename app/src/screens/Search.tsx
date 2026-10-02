@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { music, users } from '@/api/endpoints';
-import { X, Clock, ArrowUpLeft, Search as SearchIcon, Mic2, Music2, Disc3, ListMusic } from 'lucide-react';
+import { X, Clock, ArrowUpLeft, Search as SearchIcon, Mic2, Music2, Disc3, ListMusic, AlertCircle, RefreshCw } from 'lucide-react';
 import { usePlayerStore } from '@/store/player';
 import { getSongImage } from '@/utils/image';
 import { formatPlayerSong, getArtistsText } from '@/utils/song';
@@ -98,76 +98,260 @@ export default function Search() {
   const [results, setResults] = useState<any>(null);
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [suggestions, setSuggestions] = useState<any[]>([]);
-  const [history, setHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState<number>(-1);
+
+  const [history, setHistory] = useState<any[]>([]);
   const debouncedQuery = useDebounce(query, 280);
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    setPage(0);
-    setResults(null);
-    setHasMore(false);
-  }, [debouncedQuery, activeTab]);
+  const requestIdRef = useRef(0);
+  const suggestionsReqIdRef = useRef(0);
+  const searchAbortRef = useRef<AbortController | null>(null);
+  const suggestionsAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     users.searchHistory().then((d) => setHistory(d || [])).catch(() => {});
   }, []);
 
-  useEffect(() => {
-    let active = true;
-    if (debouncedQuery.length < 2) { setSuggestions([]); setResults(null); return; }
-    if (debouncedQuery.length >= 2 && page === 0) {
-      music.suggestions(debouncedQuery).then((d) => { if (active) setSuggestions(d?.suggestions || []); }).catch(() => {});
+  const cancelPendingRequests = useCallback(() => {
+    searchAbortRef.current?.abort();
+    suggestionsAbortRef.current?.abort();
+    requestIdRef.current++;
+    suggestionsReqIdRef.current++;
+  }, []);
+
+  const fetchSuggestions = useCallback(async (q: string) => {
+    if (q.trim().length < 2) {
+      setSuggestions([]);
+      setLoadingSuggestions(false);
+      return;
     }
-    if (debouncedQuery.length >= 3) {
-      if (/jiosaavn\.com\/album\//i.test(debouncedQuery) || /saavn\.com\/album\//i.test(debouncedQuery)) {
-        if (page === 0) {
-          setLoading(true);
-          music.resolveAlbumLink(debouncedQuery).then(d => {
-            if (active && d && d.id) {
-              navigate(`/album/${d.id}`);
-            }
-          }).catch(() => {
-            if (active) { setLoading(false); setResults(null); }
-          });
+    suggestionsAbortRef.current?.abort();
+    const controller = new AbortController();
+    suggestionsAbortRef.current = controller;
+    const reqId = ++suggestionsReqIdRef.current;
+
+    setLoadingSuggestions(true);
+    try {
+      const d = await music.suggestions(q.trim(), { signal: controller.signal });
+      if (reqId === suggestionsReqIdRef.current) {
+        setSuggestions(d?.suggestions || []);
+        setLoadingSuggestions(false);
+      }
+    } catch (err: any) {
+      if (err?.name !== 'AbortError' && reqId === suggestionsReqIdRef.current) {
+        setLoadingSuggestions(false);
+      }
+    }
+  }, []);
+
+  const executeSearch = useCallback(async (q: string, tab: SearchTab, searchPage: number, append = false) => {
+    const trimmed = q.trim();
+    if (!trimmed) return;
+
+    if (searchPage === 0) {
+      searchAbortRef.current?.abort();
+      const controller = new AbortController();
+      searchAbortRef.current = controller;
+      setLoading(true);
+      setSearchError(null);
+      if (!append) setResults(null);
+    } else {
+      setLoadingMore(true);
+    }
+
+    const currentController = searchAbortRef.current;
+    const reqId = ++requestIdRef.current;
+
+    try {
+      if (/jiosaavn\.com\/album\//i.test(trimmed) || /saavn\.com\/album\//i.test(trimmed)) {
+        if (searchPage === 0) {
+          const resolved = await music.resolveAlbumLink(trimmed);
+          if (reqId === requestIdRef.current && resolved?.id) {
+            navigate(`/album/${resolved.id}`);
+            return;
+          }
+        }
+      }
+
+      const res = await music.search(
+        { q: trimmed, type: tab, page: searchPage, limit: 20 },
+        { signal: currentController?.signal }
+      );
+
+      if (reqId !== requestIdRef.current) return;
+
+      if (tab === 'all') {
+        setResults(res);
+        setHasMore(false);
+      } else {
+        const newData = Array.isArray(res) ? res : (res?.items || []);
+        setResults((prev: any) => {
+          if (searchPage === 0) {
+            setHasMore(newData.length >= 20);
+            return newData;
+          }
+          const prevArr = Array.isArray(prev) ? prev : [];
+          const existingIds = new Set(prevArr.map((x: any) => x.id || x.saavnId));
+          const filtered = newData.filter((x: any) => !existingIds.has(x.id || x.saavnId));
+          setHasMore(newData.length > 0 && filtered.length > 0);
+          return [...prevArr, ...filtered];
+        });
+      }
+      setLoading(false);
+      setLoadingMore(false);
+    } catch (err: any) {
+      if (err?.name === 'AbortError') return;
+      if (reqId === requestIdRef.current) {
+        setLoading(false);
+        setLoadingMore(false);
+        if (searchPage === 0) {
+          setSearchError(err?.message || 'Search failed. Check your connection.');
+        }
+      }
+    }
+  }, [navigate]);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setQuery(val);
+    setSelectedIndex(-1);
+    setSearchError(null);
+    cancelPendingRequests();
+
+    if (!val.trim()) {
+      setIsSuggestionsOpen(false);
+      setSuggestions([]);
+      setResults(null);
+      setLoading(false);
+    } else {
+      setIsSuggestionsOpen(true);
+      setResults(null);
+    }
+  };
+
+  const handleInputFocus = () => {
+    if (query.trim()) {
+      setIsSuggestionsOpen(true);
+      if (suggestions.length === 0) {
+        fetchSuggestions(query.trim());
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (!query.trim()) return;
+    if (isSuggestionsOpen && query.trim().length >= 2) {
+      fetchSuggestions(query.trim());
+    }
+    if (query.trim().length >= 3) {
+      executeSearch(query.trim(), activeTab, 0);
+    }
+  }, [debouncedQuery]);
+
+  const handleTabChange = (tab: SearchTab) => {
+    setActiveTab(tab);
+    setPage(0);
+    setSelectedIndex(-1);
+    cancelPendingRequests();
+    if (query.trim().length >= 3) {
+      executeSearch(query.trim(), tab, 0);
+    }
+  };
+
+  const handleSelectSuggestion = (s: any) => {
+    cancelPendingRequests();
+    setIsSuggestionsOpen(false);
+    setSuggestions([]);
+    setSelectedIndex(-1);
+
+    if (s.type === 'album' && s.id) {
+      navigate(`/album/${s.id}`);
+      return;
+    }
+    if (s.type === 'artist' && s.id) {
+      navigate(`/artist/${s.id}`);
+      return;
+    }
+    if (s.type === 'playlist' && s.id) {
+      navigate(`/playlist/${s.id}`);
+      return;
+    }
+    if (s.type === 'song' && s.id) {
+      music.song(s.id).then((songRes) => {
+        if (songRes) {
+          usePlayerStore.getState().setQueue([formatPlayerSong(songRes)], 0);
+        }
+      }).catch(() => {});
+      return;
+    }
+
+    const searchText = s.text || query;
+    setQuery(searchText);
+    setPage(0);
+    executeSearch(searchText, activeTab, 0);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (isSuggestionsOpen && suggestions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedIndex((prev) => Math.min(prev + 1, suggestions.length - 1));
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedIndex((prev) => Math.max(prev - 1, -1));
+        return;
+      }
+      if (e.key === 'Escape') {
+        setIsSuggestionsOpen(false);
+        setSelectedIndex(-1);
+        return;
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (selectedIndex >= 0 && suggestions[selectedIndex]) {
+          handleSelectSuggestion(suggestions[selectedIndex]);
+        } else if (query.trim()) {
+          setIsSuggestionsOpen(false);
+          setPage(0);
+          executeSearch(query.trim(), activeTab, 0);
         }
         return;
       }
-      
-      if (page === 0) setLoading(true);
-      else setLoadingMore(true);
-      
-      music.search({ q: debouncedQuery, type: activeTab, page, limit: 20 }).then((d) => {
-        if (!active) return;
-        if (activeTab === 'all') {
-          setResults(d);
-          setHasMore(false);
-        } else {
-          const newData = Array.isArray(d) ? d : [];
-          setResults((prev: any) => {
-            if (page === 0) {
-              setHasMore(newData.length >= 20);
-              return newData;
-            }
-            // Deduplicate by id/saavnId
-            const prevArr = Array.isArray(prev) ? prev : [];
-            const existingIds = new Set(prevArr.map(x => x.id || x.saavnId));
-            const filtered = newData.filter(x => !existingIds.has(x.id || x.saavnId));
-            setHasMore(newData.length > 0 && filtered.length > 0); 
-            return [...prevArr, ...filtered];
-          });
-        }
-        setLoading(false);
-        setLoadingMore(false);
-      }).catch(() => { 
-        if (active) { setLoading(false); setLoadingMore(false); }
-      });
+    } else if (e.key === 'Enter' && query.trim()) {
+      e.preventDefault();
+      setIsSuggestionsOpen(false);
+      setPage(0);
+      executeSearch(query.trim(), activeTab, 0);
     }
-    return () => { active = false; };
-  }, [debouncedQuery, activeTab, page]);
+  };
+
+  const handleClear = () => {
+    cancelPendingRequests();
+    setQuery('');
+    setSuggestions([]);
+    setResults(null);
+    setIsSuggestionsOpen(false);
+    setSearchError(null);
+    setSelectedIndex(-1);
+    inputRef.current?.focus();
+  };
+
+  const handleLoadMore = () => {
+    const nextPage = page + 1;
+    setPage(nextPage);
+    executeSearch(query.trim(), activeTab, nextPage, true);
+  };
 
   const handlePlay = (song: any, contextQueue: any[]) => {
     const queue = contextQueue.map(formatPlayerSong);
@@ -178,7 +362,7 @@ export default function Search() {
   const tabs: SearchTab[] = ['all', 'songs', 'albums', 'artists', 'playlists'];
   const hasResults = results && (
     results.songs?.length || results.albums?.length || results.artists?.length || results.playlists?.length ||
-    (Array.isArray(results) && results.length)
+    (Array.isArray(results) && results.length > 0)
   );
 
   return (
@@ -204,8 +388,15 @@ export default function Search() {
             ref={inputRef}
             id="search-input"
             type="search"
+            role="combobox"
+            aria-expanded={isSuggestionsOpen}
+            aria-controls="search-suggestions-listbox"
+            aria-activedescendant={selectedIndex >= 0 ? `suggestion-option-${selectedIndex}` : undefined}
+            aria-autocomplete="list"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={handleInputChange}
+            onFocus={handleInputFocus}
+            onKeyDown={handleKeyDown}
             placeholder="Songs, artists, albums…"
             className="w-full rounded-2xl py-3.5 pl-11 pr-12 text-sm font-medium outline-none"
             style={{
@@ -222,7 +413,7 @@ export default function Search() {
                 initial="initial"
                 animate="animate"
                 exit="exit"
-                onClick={() => { setQuery(''); setSuggestions([]); setResults(null); inputRef.current?.focus(); }}
+                onClick={handleClear}
                 className="absolute right-3 p-1.5 rounded-full"
                 style={{ background: 'rgba(255,255,255,0.1)' }}
                 aria-label="Clear search"
@@ -238,7 +429,6 @@ export default function Search() {
         {/* No query — show browse categories + history */}
         {!query && (
           <motion.div variants={fadeVariants} initial="initial" animate="animate">
-            {/* Recent Searches */}
             {history.length > 0 && (
               <div className="px-4 mb-6">
                 <div className="flex items-center justify-between mb-3">
@@ -254,18 +444,23 @@ export default function Search() {
                 <div className="flex flex-col">
                   {history.slice(0, 6).map((item, i) => (
                     <motion.button
-                      key={i}
+                      key={`history-${item.query}-${i}`}
                       custom={i}
                       variants={listStaggerVariants}
                       initial="initial"
                       animate="animate"
-                      onClick={() => setQuery(item.query)}
-                      className="flex items-center gap-3 py-3 rounded-xl hover:bg-white/5 px-2"
+                      onClick={() => {
+                        setQuery(item.query);
+                        setIsSuggestionsOpen(false);
+                        setPage(0);
+                        executeSearch(item.query, activeTab, 0);
+                      }}
+                      className="flex items-center gap-3 py-3 rounded-xl hover:bg-white/5 px-2 text-left"
                     >
                       <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(139,61,255,0.15)' }}>
                         <Clock size={14} style={{ color: 'var(--color-primary-soft)' }} />
                       </div>
-                      <span className="text-sm flex-1 text-left" style={{ color: 'var(--color-text)' }}>{item.query}</span>
+                      <span className="text-sm flex-1" style={{ color: 'var(--color-text)' }}>{item.query}</span>
                       <ArrowUpLeft size={14} style={{ color: 'var(--color-muted)' }} />
                     </motion.button>
                   ))}
@@ -273,18 +468,22 @@ export default function Search() {
               </div>
             )}
 
-            {/* Browse categories */}
             <div className="px-4 mb-4">
               <h2 className="text-base font-bold mb-3" style={{ color: 'var(--color-text)' }}>Browse</h2>
               <div className="grid grid-cols-2 gap-3">
                 {BROWSE_CATEGORIES.map((cat, i) => (
                   <motion.button
-                    key={cat.label}
+                    key={`cat-${cat.label}`}
                     custom={i}
                     variants={listStaggerVariants}
                     initial="initial"
                     animate="animate"
-                    onClick={() => setQuery(cat.label)}
+                    onClick={() => {
+                      setQuery(cat.label);
+                      setIsSuggestionsOpen(false);
+                      setPage(0);
+                      executeSearch(cat.label, activeTab, 0);
+                    }}
                     whileTap={{ scale: 0.96 }}
                     className="relative h-20 rounded-2xl overflow-hidden flex items-center px-4 gap-2 text-left"
                     style={{ background: `linear-gradient(135deg, ${cat.color}CC, ${cat.color}55)` }}
@@ -300,35 +499,67 @@ export default function Search() {
           </motion.div>
         )}
 
-        {/* Suggestions (while typing, before full results) */}
-        {query && !results && suggestions.length > 0 && (
-          <motion.div variants={fadeVariants} initial="initial" animate="animate" className="px-4">
-            {suggestions.map((s, i) => (
-              <motion.button
-                key={i}
-                custom={i}
-                variants={listStaggerVariants}
-                initial="initial"
-                animate="animate"
-                onClick={() => setQuery(s.text)}
-                className="flex items-center gap-3 py-3 w-full rounded-xl hover:bg-white/5 px-2"
-              >
-                <SearchIcon size={15} style={{ color: 'var(--color-muted)' }} className="flex-shrink-0" />
-                <span className="text-sm" style={{ color: 'var(--color-text)' }}>{s.text}</span>
-              </motion.button>
-            ))}
+        {/* Suggestions dropdown */}
+        {query && isSuggestionsOpen && (
+          <motion.div
+            variants={fadeVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            id="search-suggestions-listbox"
+            role="listbox"
+            aria-label="Search Suggestions"
+            className="px-4 py-2"
+          >
+            {loadingSuggestions && suggestions.length === 0 && (
+              <div className="py-4 text-center text-xs text-muted flex items-center justify-center gap-2">
+                <span className="w-3.5 h-3.5 border-2 border-primary-soft border-t-transparent rounded-full animate-spin" />
+                Loading suggestions…
+              </div>
+            )}
+
+            {suggestions.map((s, i) => {
+              const isSelected = selectedIndex === i;
+              const stableKey = `${s.type || 'item'}-${s.id || s.text}`;
+              return (
+                <motion.button
+                  key={stableKey}
+                  id={`suggestion-option-${i}`}
+                  role="option"
+                  aria-selected={isSelected}
+                  custom={i}
+                  variants={listStaggerVariants}
+                  initial="initial"
+                  animate="animate"
+                  onClick={() => handleSelectSuggestion(s)}
+                  className={`flex items-center gap-3 py-3 w-full rounded-xl transition-colors px-3 text-left ${
+                    isSelected ? 'bg-white/10' : 'hover:bg-white/5'
+                  }`}
+                >
+                  {s.image ? (
+                    <img src={s.image} alt={s.text} className="w-8 h-8 rounded-lg object-cover flex-shrink-0" />
+                  ) : (
+                    <SearchIcon size={15} style={{ color: 'var(--color-muted)' }} className="flex-shrink-0 ml-1" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold line-clamp-1" style={{ color: 'var(--color-text)' }}>{s.text}</p>
+                    {s.subtitle && <p className="text-xs line-clamp-1" style={{ color: 'var(--color-muted)' }}>{s.subtitle}</p>}
+                  </div>
+                </motion.button>
+              );
+            })}
           </motion.div>
         )}
 
         {/* Full results */}
-        {results && (
+        {query && !isSuggestionsOpen && (
           <>
             {/* Filter chips */}
             <div className="flex gap-2 px-4 mb-4 overflow-x-auto scroll-x py-1 flex-shrink-0">
               {tabs.map((tab) => (
                 <motion.button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
+                  key={`tab-${tab}`}
+                  onClick={() => handleTabChange(tab)}
                   whileTap={{ scale: 0.95 }}
                   className="flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-pill text-xs font-bold transition-all"
                   style={
@@ -343,11 +574,26 @@ export default function Search() {
               ))}
             </div>
 
-            {/* Loading skeletons */}
-            {loading && (
+            {/* Error State */}
+            {searchError && !loading && (
+              <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+                <AlertCircle size={40} className="text-danger mb-3 opacity-80" />
+                <p className="text-text font-bold text-base mb-1">Search Error</p>
+                <p className="text-muted text-xs mb-4 max-w-xs">{searchError}</p>
+                <button
+                  onClick={() => executeSearch(query.trim(), activeTab, 0)}
+                  className="flex items-center gap-2 bg-surface-2 border border-border px-4 py-2 rounded-full text-xs font-bold text-text hover:bg-surface"
+                >
+                  <RefreshCw size={14} /> Retry Search
+                </button>
+              </div>
+            )}
+
+            {/* Loading Skeletons */}
+            {loading && !searchError && (
               <div className="px-4 flex flex-col gap-2">
-                {[1,2,3,4,5].map(i => (
-                  <div key={i} className="flex items-center gap-3 py-2">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div key={`skel-${i}`} className="flex items-center gap-3 py-2">
                     <div className="shimmer w-12 h-12 rounded-xl flex-shrink-0" />
                     <div className="flex-1">
                       <div className="shimmer h-3.5 w-36 rounded mb-2" />
@@ -358,7 +604,7 @@ export default function Search() {
               </div>
             )}
 
-            {!loading && (
+            {!loading && !searchError && results && (
               <AnimatePresence mode="wait">
                 <motion.div key={activeTab} variants={fadeVariants} initial="initial" animate="animate" exit="exit">
                   {/* Songs section */}
@@ -368,7 +614,7 @@ export default function Search() {
                         <p className="text-xs font-bold uppercase tracking-wider mb-2 px-2" style={{ color: 'var(--color-muted)' }}>Songs</p>
                       )}
                       {(activeTab === 'all' ? results.songs : results).slice(0, activeTab === 'all' ? 5 : 50).map((song: any, _: number, arr: any[]) => (
-                        <SongRow key={song.id || song.saavnId} song={song} onPlay={() => handlePlay(song, arr)} />
+                        <SongRow key={`song-${song.id || song.saavnId}`} song={song} onPlay={() => handlePlay(song, arr)} />
                       ))}
                     </div>
                   )}
@@ -380,7 +626,7 @@ export default function Search() {
                         <p className="text-xs font-bold uppercase tracking-wider mb-2 px-2" style={{ color: 'var(--color-muted)' }}>Albums</p>
                       )}
                       {(activeTab === 'all' ? results.albums : results).slice(0, activeTab === 'all' ? 4 : 50).map((item: any) => (
-                        <EntityRow key={item.id} item={item} type="albums" onClick={() => navigate(`/album/${item.id}`)} />
+                        <EntityRow key={`album-${item.id}`} item={item} type="albums" onClick={() => navigate(`/album/${item.id}`)} />
                       ))}
                     </div>
                   )}
@@ -392,7 +638,7 @@ export default function Search() {
                         <p className="text-xs font-bold uppercase tracking-wider mb-2 px-2" style={{ color: 'var(--color-muted)' }}>Artists</p>
                       )}
                       {(activeTab === 'all' ? results.artists : results).slice(0, activeTab === 'all' ? 4 : 50).map((item: any) => (
-                        <EntityRow key={item.id} item={item} type="artists" onClick={() => navigate(`/artist/${item.id}`)} />
+                        <EntityRow key={`artist-${item.id}`} item={item} type="artists" onClick={() => navigate(`/artist/${item.id}`)} />
                       ))}
                     </div>
                   )}
@@ -404,13 +650,13 @@ export default function Search() {
                         <p className="text-xs font-bold uppercase tracking-wider mb-2 px-2" style={{ color: 'var(--color-muted)' }}>Playlists</p>
                       )}
                       {(activeTab === 'all' ? results.playlists : results).slice(0, activeTab === 'all' ? 4 : 50).map((item: any) => (
-                        <EntityRow key={item.id} item={item} type="playlists" onClick={() => navigate(`/playlist/${item.id}`)} />
+                        <EntityRow key={`playlist-${item.id}`} item={item} type="playlists" onClick={() => navigate(`/playlist/${item.id}`)} />
                       ))}
                     </div>
                   )}
 
                   {/* No results */}
-                  {!hasResults && !loading && (
+                  {!hasResults && (
                     <div className="flex flex-col items-center py-16 px-4">
                       <SearchIcon size={48} style={{ color: 'var(--color-muted)' }} className="mb-4 opacity-40" />
                       <p className="font-semibold text-base mb-1" style={{ color: 'var(--color-text)' }}>No results for</p>
@@ -424,7 +670,7 @@ export default function Search() {
                     <div className="px-4 pb-8 pt-2">
                       <motion.button
                         whileTap={{ scale: 0.97 }}
-                        onClick={() => setPage(p => p + 1)}
+                        onClick={handleLoadMore}
                         disabled={loadingMore}
                         className="w-full py-3.5 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all"
                         style={{ 
@@ -434,7 +680,7 @@ export default function Search() {
                         }}
                       >
                         {loadingMore ? (
-                           <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                          <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
                         ) : 'Load More'}
                       </motion.button>
                     </div>

@@ -28,6 +28,7 @@ async function doFetch(fullUrl: string, options: RequestInit & { headers: Header
   try {
     return await fetch(fullUrl, options);
   } catch (err: any) {
+    if (err?.name === 'AbortError') throw err;
     if (attempt < 3 && (err?.message === 'Failed to fetch' || err?.message === 'Network request failed')) {
       const delay = attempt * 1000;
       console.warn(`[API Retry] Attempt ${attempt} failed, retrying in ${delay}ms...`);

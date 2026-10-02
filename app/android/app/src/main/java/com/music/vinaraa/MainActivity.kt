@@ -2,12 +2,13 @@ package com.music.vinaraa
 
 import android.graphics.Color
 import android.os.Bundle
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
 import com.getcapacitor.BridgeActivity
 
 class MainActivity : BridgeActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        val splash = androidx.core.splashscreen.SplashScreen.installSplashScreen(this)
+        val splash = installSplashScreen()
         registerPlugin(VinaraaPlayerPlugin::class.java)
         super.onCreate(savedInstanceState)
         

@@ -140,6 +140,37 @@ const playlistById = (id, limit = 100) => request(`/playlists${qs({ id, limit })
 const songLyrics = (id) => request(`/songs/${encodeURIComponent(id)}/lyrics`);
 const modules = (language) => request(`/modules${qs({ language })}`);
 
+/** Direct JioSaavn autocomplete endpoint (always returns raw JSON, even if Content-Type says text/html). */
+async function autocomplete(query) {
+  const q = String(query || '').trim();
+  if (!q) return { data: null, latencyMs: 0 };
+  const url = `https://www.jiosaavn.com/api.php?__call=autocomplete.get&_format=json&_marker=0&cc=in&includeMetaTags=1&query=${encodeURIComponent(q)}`;
+  const started = Date.now();
+  const controller = new AbortController();
+  const timeoutMs = DEFAULT_TIMEOUT || 8000;
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        accept: 'application/json, text/plain, */*',
+        'accept-language': 'en-IN,en;q=0.9',
+        'user-agent': 'Mozilla/5.0 (Linux; Android 14) SoundWave/1.0',
+      },
+    });
+    const text = await res.text();
+    let json = null;
+    try {
+      json = JSON.parse(text);
+    } catch (e) {
+      throw new Error(`Invalid JSON response from autocomplete: ${e.message}`);
+    }
+    return { data: json, latencyMs: Date.now() - started };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Pings a specific host without touching the pool — used by the admin probe. */
 async function probeHost(host) {
   const started = Date.now();
@@ -159,6 +190,7 @@ module.exports = {
   searchAlbums,
   searchArtists,
   searchPlaylists,
+  autocomplete,
   songsById,
   songsByIds,
   albumById,
