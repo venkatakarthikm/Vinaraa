@@ -8,77 +8,79 @@ export default function Splash() {
   const navigate = useNavigate();
 
   useEffect(() => {
+    let timeoutId: ReturnType<typeof setTimeout>;
+    const startTime = Date.now();
+
     async function init() {
       await checkAuth();
-      if (useAuthStore.getState().isAuthenticated) {
-        navigate('/home', { replace: true });
-      } else {
-        navigate('/login', { replace: true });
-      }
+      const elapsed = Date.now() - startTime;
+      const remaining = Math.max(0, 1400 - elapsed);
+
+      timeoutId = setTimeout(() => {
+        const { isAuthenticated, user } = useAuthStore.getState();
+        const seenWelcome = localStorage.getItem('vinaraa.seenWelcome');
+
+        if (isAuthenticated) {
+          if (user?.onboarding?.completed) {
+            navigate('/home', { replace: true });
+          } else {
+            navigate('/onboarding', { replace: true });
+          }
+        } else if (!seenWelcome) {
+          navigate('/welcome', { replace: true });
+        } else {
+          navigate('/login', { replace: true });
+        }
+      }, remaining);
     }
-    // Small delay so the animation can play
-    const t = setTimeout(init, 900);
-    return () => clearTimeout(t);
+
+    init();
+    return () => clearTimeout(timeoutId);
   }, [checkAuth, navigate]);
 
-  return (
-    <div
-      className="flex h-dvh w-full items-center justify-center"
-      style={{ background: 'var(--color-bg)' }}
-    >
-      {/* Background glow */}
-      <div className="absolute inset-0 pointer-events-none"
-        style={{ background: 'radial-gradient(ellipse 60% 50% at 50% 50%, rgba(139,61,255,0.18), transparent 70%)' }} />
+  const barHeights = [24, 48, 64, 36];
 
-      <div className="flex flex-col items-center gap-5 z-10">
-        {/* Animated waveform bars */}
-        <motion.div
-          className="flex items-end gap-[5px]"
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.4, ease: [0.22, 0.84, 0.34, 1] }}
-          style={{ height: 52 }}
-        >
-          {[0.5, 0.85, 1, 0.7, 0.9, 0.6, 1].map((h, i) => (
+  return (
+    <div className="relative w-full h-full bg-bg flex flex-col items-center justify-center overflow-hidden">
+      {/* Ambient Blob */}
+      <div className="absolute w-[90vw] h-[90vw] rounded-full left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-primary/15 blur-3xl pointer-events-none" />
+
+      {/* Mark & Wordmark */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: [1, 0.92] }}
+        transition={{ duration: 1.1, times: [0, 0.7, 1] }}
+        className="flex flex-col items-center gap-5 z-10"
+      >
+        {/* 96x96 Mark */}
+        <div className="w-[96px] h-[96px] rounded-[28px] bg-primary flex items-center justify-center gap-[6px] shadow-2xl">
+          {barHeights.map((h, i) => (
             <motion.div
               key={i}
-              className="w-2 rounded-t-full rounded-b-sm"
-              style={{ background: `linear-gradient(to top, var(--color-primary), var(--color-primary-soft))`, minHeight: 8 }}
-              animate={{ height: [`${h * 52 * 0.4}px`, `${h * 52}px`, `${h * 52 * 0.4}px`] }}
+              className="w-[10px] bg-on-primary rounded-full"
+              initial={{ height: 0 }}
+              animate={{ height: `${h}px` }}
               transition={{
-                repeat: Infinity,
-                duration: 0.75,
-                delay: i * 0.09,
-                ease: 'easeInOut',
+                duration: 0.7,
+                delay: i * 0.08,
+                type: 'spring',
+                stiffness: 300,
+                damping: 20,
               }}
             />
           ))}
-        </motion.div>
+        </div>
 
         {/* Wordmark */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
+        <motion.h1
+          initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.25, duration: 0.4, ease: [0.22, 0.84, 0.34, 1] }}
-          className="flex flex-col items-center"
+          transition={{ delay: 0.7, duration: 0.4 }}
+          className="t-h1 text-[28px] leading-[36px] font-bold text-text"
         >
-          <h1
-            className="text-4xl font-black tracking-tight"
-            style={{ color: 'var(--color-text)', letterSpacing: '-0.04em' }}
-          >
-            Vinaraa
-          </h1>
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.45 }}
-            className="text-xs font-bold uppercase tracking-[0.2em] mt-1"
-            style={{ color: 'var(--color-muted)' }}
-          >
-            Your Music. Your World.
-          </motion.p>
-        </motion.div>
-      </div>
+          Vinaraa
+        </motion.h1>
+      </motion.div>
     </div>
   );
 }

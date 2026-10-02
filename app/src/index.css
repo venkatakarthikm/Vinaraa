@@ -46,7 +46,7 @@
   --c-primary: #09090B;
   --c-onp: #FFFFFF;
   --c-accent: #09090B;
-  --c-danger: #C62D4E;
+  --c-danger: #C62D3E;
   --c-success: #15803D;
   --glass: 0;
 }
@@ -330,4 +330,13 @@
 
 .animate-ripple {
   animation: ripple 450ms ease-out forwards;
+}
+
+@keyframes ticker {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.animate-ticker {
+  animation: ticker 40s linear infinite;
 }

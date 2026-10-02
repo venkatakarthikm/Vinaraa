@@ -1,151 +1,153 @@
-import { useState } from 'react';
+import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { pageTransitionVariants, fadeVariants } from '@/motion';
-import { Headphones, Music2, Mic2, ArrowRight } from 'lucide-react';
+import welcomeImg from '@/assets/welcome.jpg';
+import Button from '@/components/Button';
+import { usePrefsStore } from '@/store/prefs';
 
-const slides = [
-  {
-    headline: ['Indian cinema,', 'your soundtrack.'],
-    icon: Headphones,
-    iconColor: '#B57BFF',
-    iconBg:    'rgba(139,61,255,0.15)',
-    sub: 'Stream every Bollywood, Kollywood and Tollywood hit — all in one place.',
-    accent: '#8B3DFF',
-  },
-  {
-    headline: ['Personalised', 'to your taste.'],
-    icon: Music2,
-    iconColor: '#2DE1B5',
-    iconBg:    'rgba(45,225,181,0.12)',
-    sub: 'The more you listen, the smarter Vinaraa gets at finding what you love.',
-    accent: '#2DE1B5',
-  },
-  {
-    headline: ['Your favourite', 'singers, curated.'],
-    icon: Mic2,
-    iconColor: '#FF3D8E',
-    iconBg:    'rgba(255,61,142,0.12)',
-    sub: 'From Arijit to AR Rahman — handpicked recommendations just for you.',
-    accent: '#FF3D8E',
-  },
+const LANGUAGES = [
+  'हिन्दी', 'తెలుగు', 'தமிழ்', 'ಕನ್ನಡ', 'മലയാളം', 'বাংলা',
+  'मराठी', 'ਪੰਜਾਬੀ', 'ગુજરાતી', 'ଓଡ଼ିଆ', 'भोजपुरी', 'English',
 ];
 
 export default function Welcome() {
-  const [idx, setIdx] = useState(0);
   const navigate = useNavigate();
-  const slide = slides[idx];
-  const Icon = slide.icon;
-  const isLast = idx === slides.length - 1;
+  const reduceEffects = usePrefsStore((s) => s.reduceEffects);
+
+  const handleGetStarted = () => {
+    localStorage.setItem('vinaraa.seenWelcome', 'true');
+    navigate('/register');
+  };
+
+  const handleLogin = () => {
+    localStorage.setItem('vinaraa.seenWelcome', 'true');
+    navigate('/login');
+  };
 
   return (
-    <motion.div
-      className="flex flex-col h-full"
-      style={{ background: 'var(--color-bg)' }}
-      initial="initial"
-      animate="animate"
-      exit="exit"
-      variants={pageTransitionVariants}
-    >
-      {/* Aurora glow background */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{ background: `radial-gradient(ellipse 80% 50% at 50% 0%, ${slide.accent}22, transparent 70%)`, transition: 'background 0.6s ease' }}
-      />
+    <div className="relative w-full h-full bg-bg overflow-hidden flex flex-col justify-between">
+      {/* Layer 1: Background Image with Ken-Burns effect */}
+      <div className="absolute top-0 left-0 right-0 h-[640px] overflow-hidden pointer-events-none">
+        <motion.img
+          src={welcomeImg}
+          alt="Vinaraa Performer"
+          fetchPriority="high"
+          decoding="async"
+          className="w-full h-full object-cover object-[58%_18%]"
+          animate={
+            !reduceEffects
+              ? {
+                  scale: [1.04, 1.12],
+                  x: [0, -10],
+                  y: [0, -8],
+                }
+              : {}
+          }
+          transition={{
+            duration: 16,
+            ease: 'easeInOut',
+            repeat: Infinity,
+            repeatType: 'reverse',
+          }}
+        />
 
-      {/* Skip */}
-      <div className="flex justify-end px-5" style={{ paddingTop: `calc(env(safe-area-inset-top) + 16px)` }}>
-        <button
-          onClick={() => navigate('/register')}
-          className="text-xs font-semibold px-3 py-1.5 rounded-pill"
-          style={{ color: 'var(--color-muted)', background: 'rgba(255,255,255,0.06)' }}
+        {/* Scrims */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-transparent h-[140px]" />
+        <div
+          className="absolute inset-0"
+          style={{
+            background: `linear-gradient(to bottom, transparent 300px, color-mix(in srgb, var(--c-bg) 35%, transparent) 420px, color-mix(in srgb, var(--c-bg) 85%, transparent) 520px, var(--c-bg) 600px)`,
+          }}
+        />
+      </div>
+
+      {/* Layer 2: Content */}
+      <div className="relative z-10 flex flex-col h-full justify-between px-5 pb-[calc(var(--sab)+24px)]">
+        {/* Brand Row */}
+        <motion.div
+          initial={{ opacity: 0, y: -12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          className="flex items-center gap-3 pt-[calc(var(--sat)+16px)]"
         >
-          Skip
-        </button>
-      </div>
-
-      {/* Slide dots */}
-      <div className="flex gap-1.5 justify-center mt-6">
-        {slides.map((_, i) => (
-          <motion.div
-            key={i}
-            animate={{ width: i === idx ? 28 : 8, background: i === idx ? slide.accent : 'rgba(154,152,189,0.3)' }}
-            transition={{ duration: 0.3 }}
-            className="h-1.5 rounded-pill"
-          />
-        ))}
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 flex flex-col items-center justify-center px-8 text-center">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={idx}
-            variants={fadeVariants}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            className="flex flex-col items-center"
+          <div className="w-8 h-8 rounded-[10px] bg-primary flex items-center justify-center gap-[2px]">
+            <div className="w-[2px] h-3 bg-on-primary rounded-full" />
+            <div className="w-[2px] h-5 bg-on-primary rounded-full" />
+            <div className="w-[2px] h-4 bg-on-primary rounded-full" />
+          </div>
+          <span
+            className="t-h3 text-white font-bold text-[18px]"
+            style={{ textShadow: '0 1px 8px rgba(0,0,0,0.5)' }}
           >
-            {/* Icon */}
-            <motion.div
-              className="w-28 h-28 rounded-3xl flex items-center justify-center mb-8"
-              style={{ background: slide.iconBg, border: `1px solid ${slide.accent}33` }}
-              initial={{ scale: 0.7, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: 'spring', stiffness: 260, damping: 22, delay: 0.05 }}
-            >
-              <Icon size={52} style={{ color: slide.iconColor }} />
-            </motion.div>
+            Vinaraa
+          </span>
+        </motion.div>
 
-            {/* Headline */}
-            <h1 className="text-4xl font-black leading-tight mb-4" style={{ color: 'var(--color-text)' }}>
-              {slide.headline[0]}<br />
-              <span style={{ color: slide.accent }}>{slide.headline[1]}</span>
+        {/* Lower Main Content */}
+        <div className="flex flex-col mt-auto pt-[360px]">
+          {/* Headline */}
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.3 }}
+            className="flex flex-col"
+          >
+            <h1 className="t-display text-[40px] leading-[48px] font-extrabold text-text">
+              Indian music,
             </h1>
-
-            {/* Sub */}
-            <p className="text-sm leading-relaxed max-w-xs" style={{ color: 'var(--color-muted)' }}>{slide.sub}</p>
+            <h1 className="t-display text-[40px] leading-[48px] font-extrabold text-text">
+              tuned to you.
+            </h1>
           </motion.div>
-        </AnimatePresence>
-      </div>
 
-      {/* Controls */}
-      <div className="px-6 pb-10 flex flex-col gap-3">
-        {!isLast ? (
-          <motion.button
-            whileTap={{ scale: 0.97 }}
-            onClick={() => setIdx((i) => i + 1)}
-            className="w-full text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 text-base"
-            style={{
-              background: `linear-gradient(135deg, ${slide.accent}, ${slide.accent}99)`,
-              boxShadow: `0 10px 32px ${slide.accent}44`,
-            }}
+          {/* Subline */}
+          <motion.p
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.45 }}
+            className="t-body text-[15px] text-muted mt-3 max-w-[312px] line-clamp-2"
           >
-            Next <ArrowRight size={18} />
-          </motion.button>
-        ) : (
-          <motion.button
-            whileTap={{ scale: 0.97 }}
-            onClick={() => navigate('/register')}
-            className="w-full text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 text-base"
-            style={{
-              background: 'linear-gradient(135deg, var(--color-primary), var(--color-accent))',
-              boxShadow: '0 10px 32px rgba(139,61,255,0.4)',
-            }}
+            Hindi, Telugu, Tamil and more — film songs that learn what you love.
+          </motion.p>
+
+          {/* Language Ticker */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.7, delay: 0.6 }}
+            className="relative w-full overflow-hidden my-6 h-[32px] mask-gradient"
           >
-            Let's Get Started <ArrowRight size={18} />
-          </motion.button>
-        )}
-        <button
-          onClick={() => navigate('/login')}
-          className="text-sm text-center py-2"
-          style={{ color: 'var(--color-muted)' }}
-        >
-          Already have an account?{' '}
-          <span className="font-bold" style={{ color: 'var(--color-primary-soft)' }}>Sign In</span>
-        </button>
+            <div
+              className={`flex items-center gap-2 whitespace-nowrap ${
+                !reduceEffects ? 'animate-ticker' : 'overflow-x-auto'
+              }`}
+            >
+              {[...LANGUAGES, ...LANGUAGES].map((lang, i) => (
+                <span
+                  key={i}
+                  className="h-[32px] px-3.5 rounded-full bg-surface-2 t-cap text-[13px] font-semibold text-text flex items-center justify-center flex-shrink-0"
+                >
+                  {lang}
+                </span>
+              ))}
+            </div>
+          </motion.div>
+
+          {/* Actions */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.75 }}
+            className="flex flex-col items-center gap-2"
+          >
+            <Button size="lg" onClick={handleGetStarted} className="w-full">
+              Get started
+            </Button>
+            <Button variant="ghost" onClick={handleLogin} className="w-full">
+              I already have an account
+            </Button>
+          </motion.div>
+        </div>
       </div>
-    </motion.div>
+    </div>
   );
 }
