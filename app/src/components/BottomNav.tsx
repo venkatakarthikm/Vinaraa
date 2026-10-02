@@ -1,13 +1,13 @@
 import { motion } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Home, Search, Library, BarChart2 } from 'lucide-react';
+import { House, Search, Library, ChartColumn } from 'lucide-react';
 import { getActiveTab } from '@/navigation/routes';
 
 const tabs = [
-  { id: 'home'    as const, label: 'Home',    icon: Home,     path: '/home'    },
-  { id: 'search'  as const, label: 'Search',  icon: Search,   path: '/search'  },
-  { id: 'library' as const, label: 'Library', icon: Library,  path: '/library' },
-  { id: 'stats'   as const, label: 'Stats',   icon: BarChart2,path: '/stats'   },
+  { id: 'home'    as const, label: 'Home',    icon: House,       path: '/home'    },
+  { id: 'search'  as const, label: 'Search',  icon: Search,      path: '/search'  },
+  { id: 'library' as const, label: 'Library', icon: Library,     path: '/library' },
+  { id: 'stats'   as const, label: 'Stats',   icon: ChartColumn, path: '/stats'   },
 ];
 
 export function BottomNav() {
@@ -26,8 +26,8 @@ export function BottomNav() {
   };
 
   return (
-    <div
-      className="fixed bottom-[calc(var(--sab)+8px)] left-[12px] right-[12px] z-40 h-[64px] rounded-[28px] bg-surface border border-line surface-glass shadow-lg flex items-center justify-around px-2"
+    <nav
+      className="fixed bottom-0 left-0 right-0 z-40 h-[calc(64px+var(--sab))] rounded-t-[28px] bg-surface surface-glass border-t border-line shadow-2xl flex items-center justify-around px-3 pb-[var(--sab)]"
     >
       {tabs.map((tab) => {
         const isActive = activeTab === tab.id;
@@ -44,7 +44,7 @@ export function BottomNav() {
             {isActive ? (
               <motion.div
                 layoutId="dock-pill"
-                className="h-[44px] px-[14px] rounded-[22px] bg-primary flex items-center gap-2 text-on-primary font-semibold text-xs"
+                className="h-[44px] px-[14px] rounded-[22px] bg-primary flex items-center gap-2 text-on-primary font-semibold text-xs shadow-sm"
                 transition={{ type: 'spring', stiffness: 420, damping: 34 }}
               >
                 <Icon size={22} className="text-on-primary" />
@@ -56,6 +56,6 @@ export function BottomNav() {
           </button>
         );
       })}
-    </div>
+    </nav>
   );
 }

@@ -152,11 +152,33 @@ export const usePlayerStore = create<PlayerState>()(
         });
       },
       nextTrack: () => {
+        const { queue, currentIndex, repeat } = get();
+        if (!queue.length) return;
+
+        let nextIdx = currentIndex + 1;
+        if (nextIdx >= queue.length) {
+          if (repeat === 'all') {
+            nextIdx = 0;
+          } else {
+            return;
+          }
+        }
+
+        get().setQueue(queue, nextIdx);
         import('@/native/player').then(({ VinaraaPlayer }) => {
           VinaraaPlayer.next().catch(console.error);
         });
       },
       previousTrack: () => {
+        const { queue, currentIndex } = get();
+        if (!queue.length) return;
+
+        let prevIdx = currentIndex - 1;
+        if (prevIdx < 0) {
+          prevIdx = queue.length - 1;
+        }
+
+        get().setQueue(queue, prevIdx);
         import('@/native/player').then(({ VinaraaPlayer }) => {
           VinaraaPlayer.previous().catch(console.error);
         });

@@ -24,7 +24,7 @@ export default function Welcome() {
   };
 
   return (
-    <div className="relative w-full h-full bg-bg overflow-hidden flex flex-col justify-between">
+    <div className="relative w-full h-full bg-bg overflow-hidden flex flex-col justify-between select-none">
       {/* Layer 1: Background Image with Ken-Burns effect */}
       <div className="absolute top-0 left-0 right-0 h-[640px] overflow-hidden pointer-events-none">
         <motion.img
@@ -51,7 +51,7 @@ export default function Welcome() {
         />
 
         {/* Scrims */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-transparent h-[140px]" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-transparent h-[140px]" />
         <div
           className="absolute inset-0"
           style={{
@@ -69,13 +69,13 @@ export default function Welcome() {
           transition={{ duration: 0.6 }}
           className="flex items-center gap-3 pt-[calc(var(--sat)+16px)]"
         >
-          <div className="w-8 h-8 rounded-[10px] bg-primary flex items-center justify-center gap-[2px]">
-            <div className="w-[2px] h-3 bg-on-primary rounded-full" />
-            <div className="w-[2px] h-5 bg-on-primary rounded-full" />
-            <div className="w-[2px] h-4 bg-on-primary rounded-full" />
-          </div>
+          <img
+            src="/vinaraa.png"
+            alt="Vinaraa Logo"
+            className="w-9 h-9 rounded-[12px] object-cover border border-white/20 shadow-md"
+          />
           <span
-            className="t-h3 text-white font-bold text-[18px]"
+            className="t-h3 text-white font-extrabold text-[20px] tracking-tight"
             style={{ textShadow: '0 1px 8px rgba(0,0,0,0.5)' }}
           >
             Vinaraa
@@ -83,7 +83,7 @@ export default function Welcome() {
         </motion.div>
 
         {/* Lower Main Content */}
-        <div className="flex flex-col mt-auto pt-[360px]">
+        <div className="flex flex-col mt-auto pt-[340px]">
           {/* Headline */}
           <motion.div
             initial={{ opacity: 0, y: 24 }}
@@ -91,11 +91,11 @@ export default function Welcome() {
             transition={{ duration: 0.8, delay: 0.3 }}
             className="flex flex-col"
           >
-            <h1 className="t-display text-[40px] leading-[48px] font-extrabold text-text">
-              Indian music,
+            <h1 className="t-display text-[36px] leading-[44px] font-extrabold text-text">
+              Your sound,
             </h1>
-            <h1 className="t-display text-[40px] leading-[48px] font-extrabold text-text">
-              tuned to you.
+            <h1 className="t-display text-[36px] leading-[44px] font-extrabold text-text">
+              your language.
             </h1>
           </motion.div>
 
@@ -104,9 +104,9 @@ export default function Welcome() {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.45 }}
-            className="t-body text-[15px] text-muted mt-3 max-w-[312px] line-clamp-2"
+            className="t-body text-[15px] text-muted mt-3 max-w-[340px] leading-relaxed"
           >
-            Hindi, Telugu, Tamil and more — film songs that learn what you love.
+            Telugu, Tamil, Hindi, and more - hit play on the tracks that feel like home.
           </motion.p>
 
           {/* Language Ticker */}

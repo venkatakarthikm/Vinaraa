@@ -26,7 +26,6 @@ export default function AuthScreen({ initialTab = 'login' }: { initialTab?: 'log
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Password Strength Calculation
   const getPasswordStrength = (pass: string) => {
     if (!pass) return 0;
     let score = 0;
@@ -34,7 +33,7 @@ export default function AuthScreen({ initialTab = 'login' }: { initialTab?: 'log
     if (/[A-Z]/.test(pass)) score++;
     if (/[0-9]/.test(pass)) score++;
     if (/[^A-Za-z0-9]/.test(pass)) score++;
-    return score; // 1: weak, 2: fair, 3: good, 4: strong
+    return score;
   };
 
   const passStrength = getPasswordStrength(password);
@@ -137,32 +136,34 @@ export default function AuthScreen({ initialTab = 'login' }: { initialTab?: 'log
   };
 
   return (
-    <div className="relative w-full h-full bg-bg overflow-y-auto">
-      {/* Hero Block (y 0 - 264) */}
-      <div className="relative h-[264px] px-5 pt-[calc(var(--sat)+8px)] flex flex-col justify-between">
+    <div className="relative w-full h-full bg-bg overflow-y-auto overscroll-contain">
+      {/* Hero Block */}
+      <div className="relative h-[220px] px-5 pt-[calc(var(--sat)+12px)] flex flex-col justify-between">
         <button
           onClick={() => navigate('/welcome')}
-          className="w-10 h-10 rounded-full bg-surface-2/80 flex items-center justify-center text-text"
+          className="w-10 h-10 rounded-full bg-surface-2 flex items-center justify-center text-text"
           aria-label="Back"
         >
           <ChevronLeft size={22} />
         </button>
 
-        <div className="mb-6">
-          <div className="w-12 h-12 rounded-[16px] bg-primary flex items-center justify-center mb-3">
-            <UserIcon size={24} className="text-on-primary" />
-          </div>
+        <div className="mb-4 flex flex-col items-start">
+          <img
+            src="/vinaraa.png"
+            alt="Vinaraa Logo"
+            className="w-12 h-12 rounded-[14px] object-cover border border-white/20 shadow-md mb-3"
+          />
           <h1 className="t-h1 text-[28px] font-bold text-text">
             {activeTab === 'login' ? 'Welcome back' : 'Create your account'}
           </h1>
-          <p className="t-cap text-[13px] text-muted mt-1">
+          <p className="t-cap text-[13px] text-muted mt-0.5">
             {activeTab === 'login' ? 'Pick up where you left off.' : 'It takes a minute.'}
           </p>
         </div>
       </div>
 
       {/* Sheet Block */}
-      <div className="w-full min-h-[calc(100%-264px)] bg-surface surface-glass rounded-t-[32px] border-t border-line p-6 flex flex-col justify-between gap-6">
+      <div className="w-full min-h-[calc(100%-220px)] bg-surface surface-glass rounded-t-[32px] border-t border-line p-6 pb-16 flex flex-col justify-between gap-6">
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           {/* Segmented Control */}
           <div className="h-[52px] bg-surface-2 p-1 rounded-[26px] flex items-center mb-2">
@@ -218,7 +219,6 @@ export default function AuthScreen({ initialTab = 'login' }: { initialTab?: 'log
               error={errors.password}
             />
 
-            {/* Password Strength Meter (Register only) */}
             {activeTab === 'register' && password.length > 0 && (
               <div className="mt-2 px-1 flex flex-col gap-1">
                 <div className="flex items-center justify-between">
@@ -252,7 +252,6 @@ export default function AuthScreen({ initialTab = 'login' }: { initialTab?: 'log
             />
           )}
 
-          {/* Row (Login only) */}
           {activeTab === 'login' && (
             <div className="flex items-center justify-between py-1">
               <label className="flex items-center gap-2 cursor-pointer">
@@ -275,28 +274,24 @@ export default function AuthScreen({ initialTab = 'login' }: { initialTab?: 'log
             </div>
           )}
 
-          {/* Submit Button */}
           <Button
             size="lg"
             type="submit"
             loading={loading}
             loadingText={activeTab === 'login' ? 'Signing in…' : 'Creating account…'}
-            className="w-full mt-2 sticky bottom-2"
+            className="w-full mt-2"
           >
             {activeTab === 'login' ? 'Log in' : 'Create account'}
           </Button>
         </form>
 
-        {/* Bottom Social & Legal */}
         <div className="flex flex-col gap-4 pt-2">
-          {/* Divider */}
           <div className="flex items-center gap-3">
             <div className="flex-1 h-[1px] bg-line" />
             <span className="t-cap text-[12px] text-muted">or continue with</span>
             <div className="flex-1 h-[1px] bg-line" />
           </div>
 
-          {/* Social Buttons (Disabled D11) */}
           <div className="flex items-center gap-3">
             <Button
               variant="secondary"
@@ -314,7 +309,6 @@ export default function AuthScreen({ initialTab = 'login' }: { initialTab?: 'log
             </Button>
           </div>
 
-          {/* Legal line */}
           <p className="t-cap text-[12px] text-muted text-center leading-relaxed">
             By continuing you agree to the Terms and Privacy Policy.
           </p>

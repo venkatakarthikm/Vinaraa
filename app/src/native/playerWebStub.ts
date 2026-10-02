@@ -1,4 +1,3 @@
-// Web stub for VinaraaPlayer plugin — runs in browser/Capacitor web fallback
 import { WebPlugin } from '@capacitor/core';
 import type { VinaraaPlayerPlugin } from './player';
 
@@ -28,21 +27,44 @@ export class VinaraaPlayerWebStub extends WebPlugin implements VinaraaPlayerPlug
   async setConfig(_options: { apiBase: string; deviceId: string }): Promise<void> {}
   async setPlaybackContext(_options: { source?: string; contextId?: string }): Promise<void> {}
 
+  private setupAudioListeners(audio: HTMLAudioElement) {
+    audio.addEventListener('timeupdate', () => {
+      if (this.currentSongId) {
+        this.notifyListeners('progress', {
+          songId: this.currentSongId,
+          positionMs: Math.round((audio.currentTime || 0) * 1000),
+          durationMs: Math.round((audio.duration || 0) * 1000),
+          bufferedMs: 0,
+        });
+      }
+    });
+
+    audio.addEventListener('play', () => {
+      this.notifyListeners('playbackStateChanged', { isPlaying: true, songId: this.currentSongId });
+    });
+
+    audio.addEventListener('pause', () => {
+      this.notifyListeners('playbackStateChanged', { isPlaying: false, songId: this.currentSongId });
+    });
+
+    audio.addEventListener('ended', () => {
+      this.notifyListeners('playbackStateChanged', { type: 'ended', isPlaying: false, songId: this.currentSongId });
+    });
+
+    audio.addEventListener('error', (e) => {
+      console.warn('[VinaraaPlayer Web] Audio Error:', e);
+      this.notifyListeners('error', { error: 'Network or playback error' });
+    });
+  }
+
   async play({ songId, streamUrl, title: _title, artist: _artist }: { songId: string; streamUrl: string; title: string; artist: string; artwork?: string }): Promise<void> {
     this.currentSongId = songId;
     if (this.audio) { this.audio.pause(); this.audio = null; }
     this.audio = new Audio(streamUrl);
-    this.audio.addEventListener('ended', () => {
-      this.notifyListeners('playbackStateChanged', { type: 'ended', isPlaying: false, songId: this.currentSongId });
-    });
-    this.audio.addEventListener('error', (e) => {
-      console.warn('[VinaraaPlayer Web] Audio Error:', e);
-      this.notifyListeners('error', { error: 'Network or playback error' });
-    });
+    this.setupAudioListeners(this.audio);
     this.audio.play().catch((err) => {
       console.warn('[VinaraaPlayer Web] Could not autoplay:', err.message);
     });
-    this.notifyListeners('playbackStateChanged', { isPlaying: true, songId });
   }
 
   async setQueue({ items, startIndex, positionMs, play = true }: { items: { songId: string; streamUrl: string; title: string; artist: string; artwork?: string }[]; startIndex: number; repeatMode: string; positionMs?: number; play?: boolean }): Promise<void> {
@@ -51,19 +73,10 @@ export class VinaraaPlayerWebStub extends WebPlugin implements VinaraaPlayerPlug
       this.currentSongId = item.songId;
       if (this.audio) { this.audio.pause(); this.audio = null; }
       this.audio = new Audio(item.streamUrl);
+      this.setupAudioListeners(this.audio);
       if (positionMs) this.audio.currentTime = positionMs / 1000;
-      this.audio.addEventListener('ended', () => {
-        this.notifyListeners('playbackStateChanged', { type: 'ended', isPlaying: false, songId: this.currentSongId });
-      });
-      this.audio.addEventListener('error', (e) => {
-        console.warn('[VinaraaPlayer Web] Audio Error:', e);
-        this.notifyListeners('error', { error: 'Network or playback error' });
-      });
       if (play) {
         this.audio.play().catch((err) => console.warn('[VinaraaPlayer Web] Could not autoplay:', err.message));
-        this.notifyListeners('playbackStateChanged', { isPlaying: true, songId: this.currentSongId });
-      } else {
-        this.notifyListeners('playbackStateChanged', { isPlaying: false, songId: this.currentSongId });
       }
     }
   }
@@ -80,26 +93,17 @@ export class VinaraaPlayerWebStub extends WebPlugin implements VinaraaPlayerPlug
 
   async pause(): Promise<void> {
     this.audio?.pause();
-    this.notifyListeners('playbackStateChanged', { isPlaying: false, songId: this.currentSongId });
   }
 
   async resume(): Promise<void> {
     if (this.audio && this.audio.error) {
-      // Re-initialize audio if it's in a broken state
       const src = this.audio.src;
       const time = this.audio.currentTime;
       this.audio = new Audio(src);
       this.audio.currentTime = time;
-      this.audio.addEventListener('ended', () => {
-        this.notifyListeners('playbackStateChanged', { type: 'ended', isPlaying: false, songId: this.currentSongId });
-      });
-      this.audio.addEventListener('error', (e) => {
-        console.warn('[VinaraaPlayer Web] Audio Error:', e);
-        this.notifyListeners('error', { error: 'Network or playback error' });
-      });
+      this.setupAudioListeners(this.audio);
     }
     await this.audio?.play();
-    this.notifyListeners('playbackStateChanged', { isPlaying: true, songId: this.currentSongId });
   }
 
   async stop(): Promise<void> {

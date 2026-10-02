@@ -37,7 +37,7 @@ function AppShell() {
   return (
     <div className="flex flex-col h-full relative overflow-hidden">
       <div className="flex-1 relative overflow-hidden">
-        <AnimatePresence mode="sync" initial={false}>
+        <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={location.pathname}
             variants={isTab ? tabTransitionVariants : pageTransitionVariants}
@@ -74,7 +74,7 @@ export default function Navigator() {
   return (
     <div className="relative w-full h-full overflow-hidden" style={{ background: 'var(--c-bg)' }}>
       {isAuthRoute && (
-        <AnimatePresence mode="sync" initial={false}>
+        <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={location.pathname}
             variants={tabTransitionVariants}

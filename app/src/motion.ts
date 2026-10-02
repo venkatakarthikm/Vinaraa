@@ -8,57 +8,41 @@ export const springs = {
 export const durations = {
   micro: 0.12,
   fast: 0.20,
-  base: 0.32,
-  page: 0.42,
+  base: 0.28,
+  page: 0.32,
   hero: 0.60,
 };
 
 export const easeOut = [0.22, 1, 0.36, 1] as const;
 export const easeInOut = [0.65, 0, 0.35, 1] as const;
 
-export const tabDrawerUpVariants = {
-  initial: {
-    y: '100%',
-    borderTopLeftRadius: '28px',
-    borderTopRightRadius: '28px',
-  },
-  animate: {
-    y: 0,
-    borderTopLeftRadius: '0px',
-    borderTopRightRadius: '0px',
-    transition: {
-      duration: durations.page,
-      ease: easeOut,
-    },
-  },
-  exit: {
-    scale: 0.96,
-    y: -12,
-    opacity: 0.6,
-    transition: {
-      duration: durations.page,
-      ease: easeOut,
-    },
-  },
-};
-
-export const tabTransitionVariants = tabDrawerUpVariants;
-
-export const pagePushVariants = {
-  initial: { opacity: 0, x: '28%' },
+export const tabTransitionVariants = {
+  initial: { opacity: 0, scale: 0.985 },
   animate: {
     opacity: 1,
-    x: 0,
-    transition: { duration: durations.base, ease: easeOut },
+    scale: 1,
+    transition: { duration: 0.18, ease: easeOut },
   },
   exit: {
     opacity: 0,
-    x: '-14%',
-    transition: { duration: durations.base, ease: easeOut },
+    scale: 0.985,
+    transition: { duration: 0.12, ease: easeInOut },
   },
 };
 
-export const pageTransitionVariants = pagePushVariants;
+export const pageTransitionVariants = {
+  initial: { opacity: 0, x: 24 },
+  animate: {
+    opacity: 1,
+    x: 0,
+    transition: { duration: 0.28, ease: easeOut },
+  },
+  exit: {
+    opacity: 0,
+    x: -16,
+    transition: { duration: 0.18, ease: easeInOut },
+  },
+};
 
 export const listStaggerVariants = {
   initial: { opacity: 0, y: 16 },
