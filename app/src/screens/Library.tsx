@@ -1,300 +1,410 @@
 import { useState, useEffect } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
+import { Plus, ArrowUpDown, LayoutGrid, List, Heart, Sparkles, Repeat, Clock, RefreshCw, Download, Music2 } from 'lucide-react';
 import { playlists } from '@/api/endpoints';
-import { Plus, Heart, Download, Music2, Users, ChevronRight, Play } from 'lucide-react';
-import { SongRowSkeleton } from '@/components/Skeleton';
-import { formatPlayerSong, getArtistsText } from '@/utils/song';
-import { getSongImage } from '@/utils/image';
-import { usePlayerStore } from '@/store/player';
-import { useUIStore } from '@/store/ui';
-import { getDownloadedSongs, type OfflineSong } from '@/utils/offline';
+import Page from '@/components/Page';
+import Chip from '@/components/Chip';
 import SongRow from '@/components/SongRow';
-import { listStaggerVariants, fadeVariants } from '@/motion';
+import { MediaCard, ArtistCircle } from '@/components/MediaCard';
+import { ControlStrip } from '@/components/ControlStrip';
+import { usePrefsStore } from '@/store/prefs';
+import { useUIStore } from '@/store/ui';
+import { getDownloadedSongs } from '@/utils/offline';
+import type { OfflineSong } from '@/utils/offline';
+import { formatPlayerSong } from '@/utils/song';
+import { usePlayerStore } from '@/store/player';
+import Button from '@/components/Button';
+import Input from '@/components/Input';
+import { Sheet } from '@/components/SheetHost';
 
-const LIBRARY_TABS = [
-  { label: 'Playlists', icon: Music2 },
-  { label: 'Liked',     icon: Heart  },
-  { label: 'Downloads', icon: Download },
-  { label: 'Artists',   icon: Users  },
-];
+type LibraryTab = 'playlists' | 'liked' | 'downloads' | 'artists';
 
-function LikedTab() {
-  const { data, isLoading: loading, isError } = useQuery({
-    queryKey: ['likedTracks'],
-    queryFn: playlists.likedTracks,
-    staleTime: 5 * 60 * 1000,
-  });
-  
+export default function Library() {
+  const navigate = useNavigate();
   const setQueue = usePlayerStore((s) => s.setQueue);
-  const { addToast } = useUIStore();
-  const queryClient = useQueryClient();
+  const addToast = useUIStore((s) => s.addToast);
+  const { libraryView, setLibraryView } = usePrefsStore();
 
-  const liked = data?.tracks || [];
+  const [activeTab, setActiveTab] = useState<LibraryTab>('playlists');
+  const [userPlaylists, setUserPlaylists] = useState<any[]>([]);
+  const [likedTracks, setLikedTracks] = useState<any[]>([]);
+  const [downloads, setDownloads] = useState<OfflineSong[]>([]);
+  const [followedArtists, setFollowedArtists] = useState<any[]>([]);
 
-  const handlePlay = (startIndex = 0) => {
-    if (!liked.length) return;
-    setQueue(liked.map((s: any) => formatPlayerSong(s)), startIndex);
-  };
+  const [loading, setLoading] = useState(true);
+  const [newPlaylistName, setNewPlaylistName] = useState('');
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
-  const handleUnlike = async (songId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const previous = queryClient.getQueryData(['likedTracks']) as any;
-    queryClient.setQueryData(['likedTracks'], (old: any) => ({
-      ...old,
-      tracks: old?.tracks?.filter((s: any) => (s.songId || s.id || s.saavnId) !== songId) || []
-    }));
+  const loadLibraryData = async () => {
+    setLoading(true);
     try {
-      await playlists.like(songId, false);
-    } catch {
-      queryClient.setQueryData(['likedTracks'], previous);
-      addToast('Failed to unlike song', 'error');
+      if (activeTab === 'playlists') {
+        const res = await playlists.list();
+        setUserPlaylists(Array.isArray(res) ? res : res?.items || []);
+      } else if (activeTab === 'liked') {
+        const res = await playlists.likedTracks();
+        setLikedTracks(res?.tracks || []);
+      } else if (activeTab === 'downloads') {
+        const list = await getDownloadedSongs();
+        setDownloads(list);
+      } else if (activeTab === 'artists') {
+        const keys = Object.keys(localStorage).filter((k) => k.startsWith('following:'));
+        const artists = keys.map((k) => {
+          const id = k.replace('following:', '');
+          return { id, name: `Artist ${id}` };
+        });
+        setFollowedArtists(artists);
+      }
+    } catch (_e) {
+      // Offline or error
+    } finally {
+      setLoading(false);
     }
   };
 
-  if (loading) return <div className="px-4">{Array.from({ length: 5 }).map((_, i) => <SongRowSkeleton key={i} />)}</div>;
-  if (isError) return (
-    <div className="flex flex-col items-center py-16 px-4">
-      <Heart size={48} className="text-danger mb-4 opacity-40" />
-      <p className="font-semibold" style={{ color: 'var(--color-text)' }}>Couldn't load liked songs</p>
-    </div>
-  );
-  if (!liked.length) return (
-    <div className="flex flex-col items-center py-16 px-4 text-center">
-      <div className="w-20 h-20 rounded-full flex items-center justify-center mb-4" style={{ background: 'rgba(255,61,142,0.12)' }}>
-        <Heart size={36} style={{ color: 'var(--color-accent)' }} />
-      </div>
-      <p className="font-bold text-base mb-1" style={{ color: 'var(--color-text)' }}>No liked songs yet</p>
-      <p className="text-sm" style={{ color: 'var(--color-muted)' }}>Tap ♡ on any song to save it here</p>
-    </div>
-  );
-
-  return (
-    <>
-      <div className="flex gap-3 px-5 mb-4 mt-2">
-        <button onClick={() => handlePlay(0)}
-          className="flex-1 text-white font-bold rounded-2xl py-3.5 flex items-center justify-center gap-2"
-          style={{ background: 'linear-gradient(135deg, var(--color-primary), var(--color-accent))', boxShadow: '0 8px 24px rgba(139,61,255,0.3)' }}>
-          <Play size={18} fill="white" />Play All ({liked.length})
-        </button>
-      </div>
-      {liked.map((song: any, i: number) => (
-        <motion.div
-          key={song.songId || song.id || song.saavnId}
-          custom={i}
-          variants={listStaggerVariants}
-          initial="initial"
-          animate="animate"
-          className="flex items-center gap-3 px-5 py-2.5 hover:bg-white/5 rounded-xl mx-2"
-        >
-          <button onClick={() => handlePlay(i)} className="flex items-center gap-3 flex-1 min-w-0">
-            <div className="w-12 h-12 rounded-xl overflow-hidden flex-shrink-0" style={{ background: 'var(--color-surface-2)' }}>
-              {getSongImage(song) && <img src={getSongImage(song)} alt={song.name} className="w-full h-full object-cover" />}
-            </div>
-            <div className="flex-1 min-w-0 text-left">
-              <p className="text-sm font-semibold line-clamp-1" style={{ color: 'var(--color-text)' }}>{song.name}</p>
-              <p className="text-xs line-clamp-1 mt-0.5" style={{ color: 'var(--color-muted)' }}>{getArtistsText(song)}</p>
-            </div>
-          </button>
-          <button onClick={(e) => handleUnlike(song.songId || song.id || song.saavnId, e)} className="p-2 flex-shrink-0" aria-label="Unlike">
-            <Heart size={18} fill="var(--color-accent)" style={{ color: 'var(--color-accent)' }} />
-          </button>
-        </motion.div>
-      ))}
-    </>
-  );
-}
-
-function DownloadsTab() {
-  const [downloads, setDownloads] = useState<OfflineSong[]>([]);
-  const [loading, setLoading] = useState(true);
-  const setQueue = usePlayerStore((s) => s.setQueue);
-
   useEffect(() => {
-    getDownloadedSongs().then((list) => { setDownloads(list); setLoading(false); });
-  }, []);
+    loadLibraryData();
+  }, [activeTab]);
 
-  const handlePlay = (startIndex = 0) => {
-    if (!downloads.length) return;
-    setQueue(downloads.map((s) => ({
-      id: s.id, name: s.name, artist: s.artist,
-      image: s.image, durationMs: s.durationMs, streamUrl: s.streamUrl,
-    })), startIndex);
-  };
-
-  if (loading) return <div className="px-4">{Array.from({ length: 3 }).map((_, i) => <SongRowSkeleton key={i} />)}</div>;
-  if (!downloads.length) return (
-    <div className="flex flex-col items-center py-16 px-4 text-center">
-      <div className="w-20 h-20 rounded-full flex items-center justify-center mb-4" style={{ background: 'rgba(139,61,255,0.12)' }}>
-        <Download size={36} style={{ color: 'var(--color-primary-soft)' }} />
-      </div>
-      <p className="font-bold text-base mb-1" style={{ color: 'var(--color-text)' }}>No downloads yet</p>
-      <p className="text-sm" style={{ color: 'var(--color-muted)' }}>Downloaded songs appear here for offline listening</p>
-    </div>
-  );
-
-  return (
-    <>
-      <div className="flex gap-3 px-5 mb-4 mt-2">
-        <button onClick={() => handlePlay(0)}
-          className="flex-1 text-white font-bold rounded-2xl py-3.5 flex items-center justify-center gap-2"
-          style={{ background: 'linear-gradient(135deg, var(--color-primary), var(--color-primary-soft))', boxShadow: '0 8px 24px rgba(139,61,255,0.3)' }}>
-          <Play size={18} fill="white" />Play Offline Queue
-        </button>
-      </div>
-      <div className="flex flex-col gap-1 px-4">
-        {downloads.map((song, i) => (
-          <SongRow key={song.id} song={song} onPlay={() => handlePlay(i)} />
-        ))}
-      </div>
-    </>
-  );
-}
-
-export default function Library() {
-  const location = useLocation();
-  const initialTab = (location.state as any)?.tab === 'downloads' || !navigator.onLine ? 2 : 0;
-  const [activeTab, setActiveTab] = useState(initialTab);
-  const navigate = useNavigate();
-
-  const { data: userData, isLoading: userLoading } = useQuery({
-    queryKey: ['playlists', 'user'],
-    queryFn: playlists.list,
-    staleTime: 5 * 60 * 1000,
-  });
-  const { data: sysData, isLoading: sysLoading } = useQuery({
-    queryKey: ['playlists', 'system'],
-    queryFn: playlists.system,
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const userPlaylists = Array.isArray(userData) ? userData : (userData?.items || []);
-  const systemPlaylists = Array.isArray(sysData) ? sysData : (sysData?.items || []);
-  const loading = userLoading || sysLoading;
-
-  const createPlaylist = async () => {
+  const handleCreatePlaylist = async () => {
     try {
-      const res = await playlists.create({});
-      navigate(`/playlist/${res._id || res.id}`);
-    } catch {}
+      const res = await playlists.create({ name: newPlaylistName.trim() || undefined });
+      addToast(`Created playlist ${res.name || 'New Playlist'}`, 'success');
+      setCreateDialogOpen(false);
+      setNewPlaylistName('');
+      navigate(`/playlist/${res.id || res._id}`);
+    } catch (_e) {
+      addToast('Failed to create playlist', 'error');
+    }
   };
 
+  const tabs: LibraryTab[] = ['playlists', 'liked', 'downloads', 'artists'];
+
+  const systemPlaylists = [
+    { id: 'liked', name: 'Liked Songs', subtitle: 'System · Favorite songs', icon: Heart, color: 'from-rose-500 to-pink-600' },
+    { id: 'taste-mix', name: 'Your Taste Mix', subtitle: 'System · Tuned for you', icon: Sparkles, color: 'from-purple-500 to-indigo-600' },
+    { id: 'on-repeat', name: 'On Repeat', subtitle: 'System · Most played', icon: Repeat, color: 'from-emerald-500 to-teal-600' },
+    { id: 'recently-added', name: 'Recently Added', subtitle: 'System · Latest additions', icon: Clock, color: 'from-amber-500 to-orange-600' },
+  ];
+
   return (
-    <div className="flex flex-col h-full" style={{ background: 'var(--color-bg)' }}>
-      {/* Header */}
-      <div className="px-5 flex-shrink-0" style={{ paddingTop: `calc(env(safe-area-inset-top) + 16px)`, paddingBottom: 12 }}>
-        <div className="flex items-center justify-between mb-5">
-          <h1 className="text-2xl font-black" style={{ color: 'var(--color-text)' }}>Library</h1>
-          {activeTab === 0 && (
-            <motion.button
-              whileTap={{ scale: 0.9 }}
-              onClick={createPlaylist}
-              aria-label="Create playlist"
-              className="w-9 h-9 rounded-full flex items-center justify-center"
-              style={{ background: 'rgba(139,61,255,0.15)', border: '1px solid rgba(139,61,255,0.3)' }}
-            >
-              <Plus size={18} style={{ color: 'var(--color-primary-soft)' }} />
-            </motion.button>
-          )}
-        </div>
+    <Page
+      title="Library"
+      isTabRoot
+      headerActions={
+        <button
+          onClick={() => setCreateDialogOpen(true)}
+          className="w-10 h-10 rounded-full bg-surface-2 flex items-center justify-center text-text"
+          aria-label="New playlist"
+        >
+          <Plus size={20} />
+        </button>
+      }
+    >
+      <div className="flex flex-col gap-6 px-5 pt-2 pb-[120px]">
+        {/* Control Strip Slot */}
+        <ControlStrip>
+          <div className="flex items-center justify-between w-full">
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar flex-1 mr-2">
+              {tabs.map((tab) => (
+                <Chip
+                  key={tab}
+                  label={tab.charAt(0).toUpperCase() + tab.slice(1)}
+                  selected={activeTab === tab}
+                  onClick={() => setActiveTab(tab)}
+                />
+              ))}
+            </div>
 
-        {/* Tab Selector */}
-        <div className="flex gap-2 overflow-x-auto scroll-x">
-          {LIBRARY_TABS.map((tab, i) => {
-            const Icon = tab.icon;
-            const isActive = i === activeTab;
-            return (
-              <motion.button
-                key={tab.label}
-                onClick={() => setActiveTab(i)}
-                whileTap={{ scale: 0.95 }}
-                className="flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-pill text-xs font-bold transition-all"
-                style={
-                  isActive
-                    ? { background: 'var(--color-primary)', color: 'white' }
-                    : { background: 'rgba(27,24,54,0.8)', color: 'var(--color-muted)', border: '1px solid rgba(40,36,77,0.7)' }
-                }
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <button
+                onClick={() => setLibraryView(libraryView === 'list' ? 'grid' : 'list')}
+                className="w-9 h-9 rounded-full bg-surface-2 flex items-center justify-center text-text"
+                aria-label="Toggle view"
               >
-                <Icon size={13} />
-                {tab.label}
-              </motion.button>
-            );
-          })}
-        </div>
-      </div>
+                {libraryView === 'list' ? <LayoutGrid size={18} /> : <List size={18} />}
+              </button>
+              <button
+                className="w-9 h-9 rounded-full bg-surface-2 flex items-center justify-center text-text"
+                aria-label="Sort"
+              >
+                <ArrowUpDown size={18} />
+              </button>
+            </div>
+          </div>
+        </ControlStrip>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto scroll-y pb-safe">
-        <AnimatePresence mode="wait">
-          <motion.div key={activeTab} variants={fadeVariants} initial="initial" animate="animate" exit="exit">
-            {/* Playlists */}
-            {activeTab === 0 && (
-              <>
-                {loading && Array.from({ length: 5 }).map((_, i) => <SongRowSkeleton key={i} />)}
-                {!loading && (
-                  <>
-                    {[...systemPlaylists, ...userPlaylists.filter((pl: any) => !pl.isSystem)].map((pl: any, i: number) => (
-                      <motion.button
+        {/* TAB 1: PLAYLISTS */}
+        {activeTab === 'playlists' && (
+          <div className="flex flex-col gap-6">
+            {/* Pinned System Playlists */}
+            <section className="flex flex-col gap-2">
+              <h3 className="t-micro text-[11px] font-bold text-muted uppercase tracking-wider">
+                System
+              </h3>
+              <div className="flex flex-col gap-1">
+                {systemPlaylists.map((sys) => {
+                  const Icon = sys.icon;
+                  return (
+                    <div
+                      key={sys.id}
+                      onClick={() => navigate(`/playlist/${sys.id}`)}
+                      className="w-full h-[64px] px-3 rounded-[16px] hover:bg-surface-2 flex items-center gap-3 cursor-pointer transition-colors"
+                    >
+                      <div className={`w-[56px] h-[56px] rounded-[16px] bg-gradient-to-br ${sys.color} flex items-center justify-center text-white shadow-sm flex-shrink-0`}>
+                        <Icon size={24} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="t-h3 text-[16px] font-bold text-text truncate">{sys.name}</h3>
+                        <p className="t-cap text-[12px] text-muted truncate">{sys.subtitle}</p>
+                      </div>
+                      {(sys.id === 'taste-mix' || sys.id === 'on-repeat') && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            addToast('Mix refreshed', 'success');
+                          }}
+                          className="p-2 text-muted hover:text-text"
+                          aria-label="Refresh mix"
+                        >
+                          <RefreshCw size={18} />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+
+            {/* User Playlists */}
+            <section className="flex flex-col gap-3">
+              <h3 className="t-micro text-[11px] font-bold text-muted uppercase tracking-wider">
+                Your playlists
+              </h3>
+
+              {loading ? (
+                <div className="flex flex-col gap-3">
+                  {[1, 2, 3].map((n) => (
+                    <div key={n} className="h-[64px] rounded-[16px] bg-surface-2 animate-pulse" />
+                  ))}
+                </div>
+              ) : userPlaylists.length > 0 ? (
+                libraryView === 'list' ? (
+                  <div className="flex flex-col gap-1">
+                    {userPlaylists.map((pl) => (
+                      <div
                         key={pl.id || pl._id}
-                        custom={i}
-                        variants={listStaggerVariants}
-                        initial="initial"
-                        animate="animate"
-                        whileTap={{ scale: 0.98 }}
                         onClick={() => navigate(`/playlist/${pl.id || pl._id}`)}
-                        className="flex items-center gap-4 px-5 py-3 w-full hover:bg-white/5 rounded-xl mx-0"
+                        className="w-full h-[64px] px-3 rounded-[16px] hover:bg-surface-2 flex items-center gap-3 cursor-pointer transition-colors"
                       >
-                        <div className="w-14 h-14 rounded-2xl flex-shrink-0 overflow-hidden"
-                          style={{ background: pl.isSystem ? 'linear-gradient(135deg, var(--color-primary), var(--color-accent))' : 'var(--color-surface-2)' }}>
-                          {pl.isSystem
-                            ? <Heart size={24} fill="white" className="text-white absolute inset-0 m-auto" style={{ position: 'relative', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }} />
-                            : (pl.coverImageUrl || pl.artwork)
-                              ? <img src={pl.coverImageUrl || pl.artwork} alt={pl.name} className="w-full h-full object-cover" />
-                              : <div className="w-full h-full flex items-center justify-center"><Music2 size={24} style={{ color: 'var(--color-muted)' }} /></div>
-                          }
+                        <div className="w-[56px] h-[56px] rounded-[16px] overflow-hidden bg-surface-2 flex items-center justify-center text-muted flex-shrink-0">
+                          {pl.artwork ? (
+                            <img src={pl.artwork} alt={pl.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <Music2 size={24} />
+                          )}
                         </div>
-                        <div className="flex-1 min-w-0 text-left">
-                          <p className="font-semibold line-clamp-1 text-sm" style={{ color: 'var(--color-text)' }}>{pl.name}</p>
-                          <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted)' }}>
-                            {pl.trackCount || 0} songs · {pl.isSystem ? 'System' : pl.visibility === 'public' ? 'Public' : 'Private'}
+                        <div className="flex-1 min-w-0">
+                          <h3 className="t-h3 text-[16px] font-bold text-text truncate">{pl.name}</h3>
+                          <p className="t-cap text-[12px] text-muted truncate">
+                            {pl.trackCount || 0} songs
                           </p>
                         </div>
-                        <ChevronRight size={16} style={{ color: 'var(--color-muted)' }} />
-                      </motion.button>
-                    ))}
-                    {userPlaylists.length === 0 && systemPlaylists.length === 0 && (
-                      <div className="flex flex-col items-center py-16 px-4 text-center">
-                        <div className="w-20 h-20 rounded-full flex items-center justify-center mb-4" style={{ background: 'rgba(139,61,255,0.12)' }}>
-                          <Music2 size={36} style={{ color: 'var(--color-primary-soft)' }} />
-                        </div>
-                        <p className="font-bold text-base mb-1" style={{ color: 'var(--color-text)' }}>No playlists yet</p>
-                        <p className="text-sm mb-5" style={{ color: 'var(--color-muted)' }}>Create your first playlist to get started</p>
-                        <button onClick={createPlaylist}
-                          className="px-6 py-3 rounded-2xl text-white text-sm font-bold"
-                          style={{ background: 'var(--color-primary)' }}>
-                          Create Playlist
-                        </button>
                       </div>
-                    )}
-                  </>
-                )}
-              </>
-            )}
-            {activeTab === 1 && <LikedTab />}
-            {activeTab === 2 && <DownloadsTab />}
-            {activeTab === 3 && (
-              <div className="flex flex-col items-center py-16 px-4 text-center">
-                <div className="w-20 h-20 rounded-full flex items-center justify-center mb-4" style={{ background: 'rgba(45,225,181,0.12)' }}>
-                  <Users size={36} style={{ color: 'var(--color-mint)' }} />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3">
+                    {userPlaylists.map((pl) => (
+                      <MediaCard
+                        key={pl.id || pl._id}
+                        id={pl.id || pl._id}
+                        title={pl.name}
+                        subtitle={`${pl.trackCount || 0} songs`}
+                        image={pl.artwork}
+                        type="playlist"
+                        width="100%"
+                        onClick={() => navigate(`/playlist/${pl.id || pl._id}`)}
+                      />
+                    ))}
+                  </div>
+                )
+              ) : (
+                <div className="py-12 flex flex-col items-center text-center gap-3">
+                  <div className="w-[72px] h-[72px] rounded-full bg-surface-2 flex items-center justify-center text-muted">
+                    <Music2 size={32} />
+                  </div>
+                  <h2 className="t-h2 text-[20px] font-bold text-text">No playlists yet</h2>
+                  <p className="t-cap text-[13px] text-muted">
+                    Save songs to start your collection.
+                  </p>
+                  <Button size="sm" onClick={() => setCreateDialogOpen(true)} className="mt-2">
+                    Create playlist
+                  </Button>
                 </div>
-                <p className="font-bold text-base mb-1" style={{ color: 'var(--color-text)' }}>Artists coming soon</p>
-                <p className="text-sm" style={{ color: 'var(--color-muted)' }}>Followed artists will appear here</p>
+              )}
+            </section>
+          </div>
+        )}
+
+        {/* TAB 2: LIKED */}
+        {activeTab === 'liked' && (
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <span className="t-cap text-[13px] font-semibold text-muted">
+                {likedTracks.length} liked songs
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    if (likedTracks.length) {
+                      setQueue(likedTracks.map(formatPlayerSong), 0);
+                      navigate('/player');
+                    }
+                  }}
+                >
+                  Play
+                </Button>
+              </div>
+            </div>
+
+            {loading ? (
+              <div className="flex flex-col gap-3">
+                {[1, 2, 3, 4].map((n) => (
+                  <div key={n} className="h-[64px] rounded-[16px] bg-surface-2 animate-pulse" />
+                ))}
+              </div>
+            ) : likedTracks.length > 0 ? (
+              <div className="flex flex-col divide-y divide-line/20">
+                {likedTracks.map((song) => (
+                  <SongRow
+                    key={song.id}
+                    song={song}
+                    onPlay={() => {
+                      setQueue([formatPlayerSong(song)], 0);
+                      navigate('/player');
+                    }}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="py-16 flex flex-col items-center text-center gap-3">
+                <div className="w-[72px] h-[72px] rounded-full bg-surface-2 flex items-center justify-center text-heart">
+                  <Heart size={32} />
+                </div>
+                <h2 className="t-h2 text-[20px] font-bold text-text">No liked songs yet</h2>
+                <p className="t-cap text-[13px] text-muted">Tap the heart on any song.</p>
+                <Button size="sm" onClick={() => navigate('/home')} className="mt-2">
+                  Browse music
+                </Button>
               </div>
             )}
-          </motion.div>
-        </AnimatePresence>
+          </div>
+        )}
+
+        {/* TAB 3: DOWNLOADS */}
+        {activeTab === 'downloads' && (
+          <div className="flex flex-col gap-4">
+            {downloads.length > 0 ? (
+              <div className="flex flex-col divide-y divide-line/20">
+                {downloads.map((song) => (
+                  <SongRow
+                    key={song.id}
+                    song={{
+                      id: song.id,
+                      name: song.name,
+                      artist: song.artist,
+                      image: song.image,
+                      durationMs: song.durationMs,
+                      streamUrl: song.streamUrl,
+                    }}
+                    isDownloaded
+                    onPlay={() => {
+                      setQueue(
+                        [
+                          {
+                            id: song.id,
+                            name: song.name,
+                            artist: song.artist,
+                            image: song.image,
+                            durationMs: song.durationMs,
+                            streamUrl: song.streamUrl,
+                          },
+                        ],
+                        0
+                      );
+                      navigate('/player');
+                    }}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="py-16 flex flex-col items-center text-center gap-3">
+                <div className="w-[72px] h-[72px] rounded-full bg-surface-2 flex items-center justify-center text-muted">
+                  <Download size={32} />
+                </div>
+                <h2 className="t-h2 text-[20px] font-bold text-text">Nothing downloaded yet</h2>
+                <p className="t-cap text-[13px] text-muted">
+                  Download songs to listen without internet.
+                </p>
+                <Button size="sm" onClick={() => navigate('/home')} className="mt-2">
+                  Browse music
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 4: ARTISTS */}
+        {activeTab === 'artists' && (
+          <div className="flex flex-col gap-4">
+            {followedArtists.length > 0 ? (
+              <div className="grid grid-cols-2 gap-y-6 justify-items-center">
+                {followedArtists.map((artist) => (
+                  <ArtistCircle
+                    key={artist.id}
+                    id={artist.id}
+                    name={artist.name}
+                    size={96}
+                    onClick={() => navigate(`/artist/${artist.id}`)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="py-16 flex flex-col items-center text-center gap-3">
+                <div className="w-[72px] h-[72px] rounded-full bg-surface-2 flex items-center justify-center text-muted">
+                  <Music2 size={32} />
+                </div>
+                <h2 className="t-h2 text-[20px] font-bold text-text">No followed artists</h2>
+                <p className="t-cap text-[13px] text-muted">
+                  Follow artists to see them here.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
-    </div>
+
+      {/* New Playlist Sheet */}
+      <Sheet
+        id="create-playlist-sheet"
+        isOpen={createDialogOpen}
+        onClose={() => setCreateDialogOpen(false)}
+        title="New playlist"
+      >
+        <div className="flex flex-col gap-4 py-2">
+          <Input
+            label="Playlist name"
+            value={newPlaylistName}
+            onChange={(e) => setNewPlaylistName(e.target.value)}
+            placeholder="e.g. My Favorites"
+          />
+          <Button size="lg" onClick={handleCreatePlaylist} className="w-full mt-2">
+            Create
+          </Button>
+        </div>
+      </Sheet>
+    </Page>
   );
 }

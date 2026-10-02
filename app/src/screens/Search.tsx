@@ -1,696 +1,417 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { music, users } from '@/api/endpoints';
-import { X, Clock, ArrowUpLeft, Search as SearchIcon, Mic2, Music2, Disc3, ListMusic, AlertCircle, RefreshCw } from 'lucide-react';
+import { Search as SearchIcon, X, SlidersHorizontal, Clock, ArrowUpLeft, CircleAlert } from 'lucide-react';
 import { usePlayerStore } from '@/store/player';
-import { getSongImage } from '@/utils/image';
-import { formatPlayerSong, getArtistsText } from '@/utils/song';
-import { listStaggerVariants, fadeVariants } from '@/motion';
+import { formatPlayerSong } from '@/utils/song';
+import Page from '@/components/Page';
+import SongRow from '@/components/SongRow';
+import { MediaCard, ArtistCircle } from '@/components/MediaCard';
+import Chip from '@/components/Chip';
+import { ControlStrip } from '@/components/ControlStrip';
+import Button from '@/components/Button';
+import { Sheet } from '@/components/SheetHost';
 
-function useDebounce<T>(value: T, delay: number): T {
-  const [debouncedValue, setDebouncedValue] = useState<T>(value);
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedValue(value), delay);
-    return () => clearTimeout(timer);
-  }, [value, delay]);
-  return debouncedValue;
-}
+type SearchType = 'all' | 'songs' | 'albums' | 'artists' | 'playlists';
 
-type SearchTab = 'all' | 'songs' | 'albums' | 'artists' | 'playlists';
-
-const TAB_ICONS: Record<SearchTab, React.ReactNode> = {
-  all:       <SearchIcon size={13} />,
-  songs:     <Music2 size={13} />,
-  albums:    <Disc3 size={13} />,
-  artists:   <Mic2 size={13} />,
-  playlists: <ListMusic size={13} />,
-};
-
-function SongRow({ song, onPlay }: { song: any; onPlay: () => void }) {
-  const durationSec = song.durationMs ? Math.floor(song.durationMs / 1000) : 0;
-  const mins = Math.floor(durationSec / 60);
-  const secs = String(durationSec % 60).padStart(2, '0');
-  return (
-    <motion.button
-      onClick={onPlay}
-      whileTap={{ scale: 0.98 }}
-      className="flex items-center gap-3 px-4 py-3 w-full hover:bg-white/5 active:bg-white/10 rounded-xl transition-colors"
-    >
-      <div className="w-12 h-12 rounded-xl overflow-hidden flex-shrink-0 bg-white/5 relative">
-        {getSongImage(song) && (
-          <img src={getSongImage(song)} alt={song.name} className="w-full h-full object-cover" />
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
-      </div>
-      <div className="flex-1 min-w-0 text-left">
-        <p className="text-sm font-semibold line-clamp-1" style={{ color: 'var(--color-text)' }}>{song.name}</p>
-        <p className="text-xs line-clamp-1 mt-0.5" style={{ color: 'var(--color-muted)' }}>{getArtistsText(song)}</p>
-      </div>
-      {durationSec > 0 && (
-        <span className="text-xs flex-shrink-0 font-mono" style={{ color: 'var(--color-muted)' }}>
-          {mins}:{secs}
-        </span>
-      )}
-    </motion.button>
-  );
-}
-
-function EntityRow({ item, type, onClick }: { item: any; type: string; onClick: () => void }) {
-  const isArtist = type === 'artists';
-  return (
-    <motion.button
-      onClick={onClick}
-      whileTap={{ scale: 0.98 }}
-      className="flex items-center gap-3 px-4 py-3 w-full hover:bg-white/5 rounded-xl transition-colors"
-    >
-      <div
-        className={`w-12 h-12 overflow-hidden flex-shrink-0 bg-white/5 ${isArtist ? 'rounded-full' : 'rounded-xl'}`}
-      >
-        {getSongImage(item) && (
-          <img src={getSongImage(item)} alt={item.name} className="w-full h-full object-cover" />
-        )}
-      </div>
-      <div className="flex-1 min-w-0 text-left">
-        <p className="text-sm font-semibold line-clamp-1" style={{ color: 'var(--color-text)' }}>{item.name}</p>
-        <p className="text-xs capitalize mt-0.5" style={{ color: 'var(--color-muted)' }}>
-          {type === 'albums' ? `Album${item.year ? ` · ${item.year}` : ''}` : type === 'playlists' ? 'Playlist' : 'Artist'}
-        </p>
-      </div>
-    </motion.button>
-  );
-}
-
-const BROWSE_CATEGORIES = [
-  { label: 'Telugu Hits',   color: '#8B3DFF', emoji: '🎬' },
-  { label: 'Bollywood',     color: '#FF3D8E', emoji: '🎵' },
-  { label: 'Tamil',         color: '#2DE1B5', emoji: '🎶' },
-  { label: 'Punjabi',       color: '#FFC247', emoji: '🔥' },
-  { label: 'Devotional',    color: '#FF7A5A', emoji: '🙏' },
-  { label: 'Chill Vibes',   color: '#00BFFF', emoji: '☁️' },
-  { label: 'Party',         color: '#FF3D8E', emoji: '🎉' },
-  { label: 'Classical',     color: '#B57BFF', emoji: '🎻' },
+const BROWSE_LANGUAGES = [
+  { code: 'hi', label: 'Hindi', native: 'हिन्दी', color: 'from-purple-900/60 to-pink-900/40' },
+  { code: 'te', label: 'Telugu', native: 'తెలుగు', color: 'from-cyan-900/60 to-teal-900/40' },
+  { code: 'ta', label: 'Tamil', native: 'தமிழ்', color: 'from-emerald-900/60 to-green-900/40' },
+  { code: 'kn', label: 'Kannada', native: 'ಕನ್ನಡ', color: 'from-amber-900/60 to-orange-900/40' },
+  { code: 'ml', label: 'Malayalam', native: 'മലയാളം', color: 'from-blue-900/60 to-indigo-900/40' },
+  { code: 'bn', label: 'Bengali', native: 'বাংলা', color: 'from-red-900/60 to-rose-900/40' },
 ];
 
 export default function Search() {
-  const [query, setQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<SearchTab>('all');
-  const [results, setResults] = useState<any>(null);
-  const [page, setPage] = useState(0);
-  const [hasMore, setHasMore] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
-  const [searchError, setSearchError] = useState<string | null>(null);
-
-  const [suggestions, setSuggestions] = useState<any[]>([]);
-  const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false);
-  const [selectedIndex, setSelectedIndex] = useState<number>(-1);
-
-  const [history, setHistory] = useState<any[]>([]);
-  const debouncedQuery = useDebounce(query, 280);
   const navigate = useNavigate();
+  const setQueue = usePlayerStore((s) => s.setQueue);
+
+  const [query, setQuery] = useState('');
+  const [activeType, setActiveType] = useState<SearchType>('all');
+  const [history, setHistory] = useState<any[]>([]);
+  const [trending, setTrending] = useState<any[]>([]);
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [results, setResults] = useState<any>(null);
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [selectedLanguage, setSelectedLanguage] = useState<string>('All');
+
   const inputRef = useRef<HTMLInputElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  const requestIdRef = useRef(0);
-  const suggestionsReqIdRef = useRef(0);
-  const searchAbortRef = useRef<AbortController | null>(null);
-  const suggestionsAbortRef = useRef<AbortController | null>(null);
-
+  // Load history & trending on mount
   useEffect(() => {
-    users.searchHistory().then((d) => setHistory(d || [])).catch(() => {});
+    users.searchHistory().then((h) => setHistory(h || [])).catch(() => {});
+    music.trending('all').then((res: any) => setTrending(res?.items || [])).catch(() => {});
   }, []);
 
-  const cancelPendingRequests = useCallback(() => {
-    searchAbortRef.current?.abort();
-    suggestionsAbortRef.current?.abort();
-    requestIdRef.current++;
-    suggestionsReqIdRef.current++;
-  }, []);
-
-  const fetchSuggestions = useCallback(async (q: string) => {
-    if (q.trim().length < 2) {
-      setSuggestions([]);
-      setLoadingSuggestions(false);
-      return;
-    }
-    suggestionsAbortRef.current?.abort();
-    const controller = new AbortController();
-    suggestionsAbortRef.current = controller;
-    const reqId = ++suggestionsReqIdRef.current;
-
-    setLoadingSuggestions(true);
-    try {
-      const d = await music.suggestions(q.trim(), { signal: controller.signal });
-      if (reqId === suggestionsReqIdRef.current) {
-        setSuggestions(d?.suggestions || []);
-        setLoadingSuggestions(false);
-      }
-    } catch (err: any) {
-      if (err?.name !== 'AbortError' && reqId === suggestionsReqIdRef.current) {
-        setLoadingSuggestions(false);
-      }
-    }
-  }, []);
-
-  const executeSearch = useCallback(async (q: string, tab: SearchTab, searchPage: number, append = false) => {
-    const trimmed = q.trim();
-    if (!trimmed) return;
-
-    if (searchPage === 0) {
-      searchAbortRef.current?.abort();
-      const controller = new AbortController();
-      searchAbortRef.current = controller;
-      setLoading(true);
-      setSearchError(null);
-      if (!append) setResults(null);
-    } else {
-      setLoadingMore(true);
-    }
-
-    const currentController = searchAbortRef.current;
-    const reqId = ++requestIdRef.current;
-
-    try {
-      if (/jiosaavn\.com\/album\//i.test(trimmed) || /saavn\.com\/album\//i.test(trimmed)) {
-        if (searchPage === 0) {
-          const resolved = await music.resolveAlbumLink(trimmed);
-          if (reqId === requestIdRef.current && resolved?.id) {
-            navigate(`/album/${resolved.id}`);
-            return;
-          }
-        }
-      }
-
-      const res = await music.search(
-        { q: trimmed, type: tab, page: searchPage, limit: 20 },
-        { signal: currentController?.signal }
-      );
-
-      if (reqId !== requestIdRef.current) return;
-
-      if (tab === 'all') {
-        setResults(res);
-        setHasMore(false);
-      } else {
-        const newData = Array.isArray(res) ? res : (res?.items || []);
-        setResults((prev: any) => {
-          if (searchPage === 0) {
-            setHasMore(newData.length >= 20);
-            return newData;
-          }
-          const prevArr = Array.isArray(prev) ? prev : [];
-          const existingIds = new Set(prevArr.map((x: any) => x.id || x.saavnId));
-          const filtered = newData.filter((x: any) => !existingIds.has(x.id || x.saavnId));
-          setHasMore(newData.length > 0 && filtered.length > 0);
-          return [...prevArr, ...filtered];
-        });
-      }
-      setLoading(false);
-      setLoadingMore(false);
-    } catch (err: any) {
-      if (err?.name === 'AbortError') return;
-      if (reqId === requestIdRef.current) {
-        setLoading(false);
-        setLoadingMore(false);
-        if (searchPage === 0) {
-          setSearchError(err?.message || 'Search failed. Check your connection.');
-        }
-      }
-    }
-  }, [navigate]);
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    setQuery(val);
-    setSelectedIndex(-1);
-    setSearchError(null);
-    cancelPendingRequests();
-
-    if (!val.trim()) {
-      setIsSuggestionsOpen(false);
+  // Debounced suggestions & search
+  useEffect(() => {
+    if (!query.trim()) {
       setSuggestions([]);
       setResults(null);
-      setLoading(false);
-    } else {
-      setIsSuggestionsOpen(true);
-      setResults(null);
-    }
-  };
-
-  const handleInputFocus = () => {
-    if (query.trim()) {
-      setIsSuggestionsOpen(true);
-      if (suggestions.length === 0) {
-        fetchSuggestions(query.trim());
-      }
-    }
-  };
-
-  useEffect(() => {
-    if (!query.trim()) return;
-    if (isSuggestionsOpen && query.trim().length >= 2) {
-      fetchSuggestions(query.trim());
-    }
-    if (query.trim().length >= 3) {
-      executeSearch(query.trim(), activeTab, 0);
-    }
-  }, [debouncedQuery]);
-
-  const handleTabChange = (tab: SearchTab) => {
-    setActiveTab(tab);
-    setPage(0);
-    setSelectedIndex(-1);
-    cancelPendingRequests();
-    if (query.trim().length >= 3) {
-      executeSearch(query.trim(), tab, 0);
-    }
-  };
-
-  const handleSelectSuggestion = (s: any) => {
-    cancelPendingRequests();
-    setIsSuggestionsOpen(false);
-    setSuggestions([]);
-    setSelectedIndex(-1);
-
-    if (s.type === 'album' && s.id) {
-      navigate(`/album/${s.id}`);
-      return;
-    }
-    if (s.type === 'artist' && s.id) {
-      navigate(`/artist/${s.id}`);
-      return;
-    }
-    if (s.type === 'playlist' && s.id) {
-      navigate(`/playlist/${s.id}`);
-      return;
-    }
-    if (s.type === 'song' && s.id) {
-      music.song(s.id).then((songRes) => {
-        if (songRes) {
-          usePlayerStore.getState().setQueue([formatPlayerSong(songRes)], 0);
-        }
-      }).catch(() => {});
       return;
     }
 
-    const searchText = s.text || query;
-    setQuery(searchText);
-    setPage(0);
-    executeSearch(searchText, activeTab, 0);
-  };
+    const timer = setTimeout(() => {
+      if (abortControllerRef.current) abortControllerRef.current.abort();
+      abortControllerRef.current = new AbortController();
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (isSuggestionsOpen && suggestions.length > 0) {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setSelectedIndex((prev) => Math.min(prev + 1, suggestions.length - 1));
-        return;
+      // Suggestions
+      music.suggestions(query.trim(), { signal: abortControllerRef.current.signal })
+        .then((sRes: any) => setSuggestions(sRes?.suggestions || []))
+        .catch(() => {});
+
+      // Full Search if length >= 2
+      if (query.trim().length >= 2) {
+        setLoading(true);
+        setError(false);
+        music.search(
+          { q: query.trim(), type: activeType, page: 0, limit: 20, language: selectedLanguage === 'All' ? undefined : selectedLanguage },
+          { signal: abortControllerRef.current.signal }
+        )
+          .then((rRes: any) => {
+            setResults(rRes);
+            users.addSearchHistory({ query: query.trim() }).catch(() => {});
+          })
+          .catch((e) => {
+            if (e.name !== 'AbortError') setError(true);
+          })
+          .finally(() => setLoading(false));
       }
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setSelectedIndex((prev) => Math.max(prev - 1, -1));
-        return;
-      }
-      if (e.key === 'Escape') {
-        setIsSuggestionsOpen(false);
-        setSelectedIndex(-1);
-        return;
-      }
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        if (selectedIndex >= 0 && suggestions[selectedIndex]) {
-          handleSelectSuggestion(suggestions[selectedIndex]);
-        } else if (query.trim()) {
-          setIsSuggestionsOpen(false);
-          setPage(0);
-          executeSearch(query.trim(), activeTab, 0);
-        }
-        return;
-      }
-    } else if (e.key === 'Enter' && query.trim()) {
-      e.preventDefault();
-      setIsSuggestionsOpen(false);
-      setPage(0);
-      executeSearch(query.trim(), activeTab, 0);
-    }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [query, activeType, selectedLanguage]);
+
+  const handleClearHistory = () => {
+    users.clearSearchHistory().then(() => setHistory([])).catch(() => {});
   };
 
-  const handleClear = () => {
-    cancelPendingRequests();
-    setQuery('');
-    setSuggestions([]);
-    setResults(null);
-    setIsSuggestionsOpen(false);
-    setSearchError(null);
-    setSelectedIndex(-1);
-    inputRef.current?.focus();
+  const handleDeleteHistoryItem = (q: string) => {
+    users.deleteSearchHistoryItem(q).then(() => {
+      setHistory((prev) => prev.filter((h) => h.query !== q));
+    }).catch(() => {});
   };
 
-  const handleLoadMore = () => {
-    const nextPage = page + 1;
-    setPage(nextPage);
-    executeSearch(query.trim(), activeTab, nextPage, true);
+  const handlePlaySong = (song: any, songList: any[]) => {
+    const formatted = songList.map(formatPlayerSong);
+    const startIdx = formatted.findIndex((s) => s.id === song.id);
+    setQueue(formatted, Math.max(0, startIdx));
+    navigate('/player');
   };
 
-  const handlePlay = (song: any, contextQueue: any[]) => {
-    const queue = contextQueue.map(formatPlayerSong);
-    const startIndex = queue.findIndex(s => s.id === (song.id || song.saavnId));
-    usePlayerStore.getState().setQueue(queue, startIndex >= 0 ? startIndex : 0);
-  };
-
-  const tabs: SearchTab[] = ['all', 'songs', 'albums', 'artists', 'playlists'];
-  const hasResults = results && (
-    results.songs?.length || results.albums?.length || results.artists?.length || results.playlists?.length ||
-    (Array.isArray(results) && results.length > 0)
-  );
+  const types: SearchType[] = ['all', 'songs', 'albums', 'artists', 'playlists'];
 
   return (
-    <div className="flex flex-col h-full" style={{ background: 'var(--color-bg)' }}>
-      {/* Search Bar Header */}
-      <div
-        className="flex-shrink-0 px-4 pt-safe"
-        style={{
-          paddingTop: `calc(env(safe-area-inset-top) + 16px)`,
-          paddingBottom: 12,
-          background: 'rgba(9,7,20,0.95)',
-          backdropFilter: 'blur(20px)',
-          WebkitBackdropFilter: 'blur(20px)',
-        }}
-      >
-        <div className="relative flex items-center">
-          <SearchIcon
-            className="absolute left-4 z-10 pointer-events-none"
-            size={18}
-            style={{ color: query ? 'var(--color-primary-soft)' : 'var(--color-muted)' }}
-          />
-          <input
-            ref={inputRef}
-            id="search-input"
-            type="search"
-            role="combobox"
-            aria-expanded={isSuggestionsOpen}
-            aria-controls="search-suggestions-listbox"
-            aria-activedescendant={selectedIndex >= 0 ? `suggestion-option-${selectedIndex}` : undefined}
-            aria-autocomplete="list"
-            value={query}
-            onChange={handleInputChange}
-            onFocus={handleInputFocus}
-            onKeyDown={handleKeyDown}
-            placeholder="Songs, artists, albums…"
-            className="w-full rounded-2xl py-3.5 pl-11 pr-12 text-sm font-medium outline-none"
-            style={{
-              background: 'rgba(27,24,54,0.8)',
-              color: 'var(--color-text)',
-              border: `1px solid ${query ? 'rgba(139,61,255,0.5)' : 'rgba(40,36,77,0.6)'}`,
-              transition: 'border-color 0.2s ease',
-            }}
-          />
-          <AnimatePresence>
-            {query && (
-              <motion.button
-                variants={fadeVariants}
-                initial="initial"
-                animate="animate"
-                exit="exit"
-                onClick={handleClear}
-                className="absolute right-3 p-1.5 rounded-full"
-                style={{ background: 'rgba(255,255,255,0.1)' }}
-                aria-label="Clear search"
-              >
-                <X size={14} style={{ color: 'var(--color-muted)' }} />
-              </motion.button>
-            )}
-          </AnimatePresence>
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto scroll-y pb-safe">
-        {/* No query — show browse categories + history */}
-        {!query && (
-          <motion.div variants={fadeVariants} initial="initial" animate="animate">
-            {history.length > 0 && (
-              <div className="px-4 mb-6">
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-base font-bold" style={{ color: 'var(--color-text)' }}>Recent</h2>
-                  <button
-                    onClick={() => { users.clearSearchHistory?.(); setHistory([]); }}
-                    className="text-xs font-medium"
-                    style={{ color: 'var(--color-muted)' }}
-                  >
-                    Clear all
-                  </button>
-                </div>
-                <div className="flex flex-col">
-                  {history.slice(0, 6).map((item, i) => (
-                    <motion.button
-                      key={`history-${item.query}-${i}`}
-                      custom={i}
-                      variants={listStaggerVariants}
-                      initial="initial"
-                      animate="animate"
-                      onClick={() => {
-                        setQuery(item.query);
-                        setIsSuggestionsOpen(false);
-                        setPage(0);
-                        executeSearch(item.query, activeTab, 0);
-                      }}
-                      className="flex items-center gap-3 py-3 rounded-xl hover:bg-white/5 px-2 text-left"
-                    >
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(139,61,255,0.15)' }}>
-                        <Clock size={14} style={{ color: 'var(--color-primary-soft)' }} />
-                      </div>
-                      <span className="text-sm flex-1" style={{ color: 'var(--color-text)' }}>{item.query}</span>
-                      <ArrowUpLeft size={14} style={{ color: 'var(--color-muted)' }} />
-                    </motion.button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="px-4 mb-4">
-              <h2 className="text-base font-bold mb-3" style={{ color: 'var(--color-text)' }}>Browse</h2>
-              <div className="grid grid-cols-2 gap-3">
-                {BROWSE_CATEGORIES.map((cat, i) => (
-                  <motion.button
-                    key={`cat-${cat.label}`}
-                    custom={i}
-                    variants={listStaggerVariants}
-                    initial="initial"
-                    animate="animate"
-                    onClick={() => {
-                      setQuery(cat.label);
-                      setIsSuggestionsOpen(false);
-                      setPage(0);
-                      executeSearch(cat.label, activeTab, 0);
-                    }}
-                    whileTap={{ scale: 0.96 }}
-                    className="relative h-20 rounded-2xl overflow-hidden flex items-center px-4 gap-2 text-left"
-                    style={{ background: `linear-gradient(135deg, ${cat.color}CC, ${cat.color}55)` }}
-                  >
-                    <span className="text-2xl">{cat.emoji}</span>
-                    <span className="text-white font-bold text-sm leading-tight">{cat.label}</span>
-                    <div className="absolute right-3 bottom-3 w-10 h-10 rounded-full opacity-20"
-                      style={{ background: cat.color, filter: 'blur(12px)' }} />
-                  </motion.button>
-                ))}
-              </div>
-            </div>
-          </motion.div>
-        )}
-
-        {/* Suggestions dropdown */}
-        {query && isSuggestionsOpen && (
-          <motion.div
-            variants={fadeVariants}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            id="search-suggestions-listbox"
-            role="listbox"
-            aria-label="Search Suggestions"
-            className="px-4 py-2"
-          >
-            {loadingSuggestions && suggestions.length === 0 && (
-              <div className="py-4 text-center text-xs text-muted flex items-center justify-center gap-2">
-                <span className="w-3.5 h-3.5 border-2 border-primary-soft border-t-transparent rounded-full animate-spin" />
-                Loading suggestions…
-              </div>
-            )}
-
-            {suggestions.map((s, i) => {
-              const isSelected = selectedIndex === i;
-              const stableKey = `${s.type || 'item'}-${s.id || s.text}`;
-              return (
-                <motion.button
-                  key={stableKey}
-                  id={`suggestion-option-${i}`}
-                  role="option"
-                  aria-selected={isSelected}
-                  custom={i}
-                  variants={listStaggerVariants}
-                  initial="initial"
-                  animate="animate"
-                  onClick={() => handleSelectSuggestion(s)}
-                  className={`flex items-center gap-3 py-3 w-full rounded-xl transition-colors px-3 text-left ${
-                    isSelected ? 'bg-white/10' : 'hover:bg-white/5'
-                  }`}
-                >
-                  {s.image ? (
-                    <img src={s.image} alt={s.text} className="w-8 h-8 rounded-lg object-cover flex-shrink-0" />
-                  ) : (
-                    <SearchIcon size={15} style={{ color: 'var(--color-muted)' }} className="flex-shrink-0 ml-1" />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold line-clamp-1" style={{ color: 'var(--color-text)' }}>{s.text}</p>
-                    {s.subtitle && <p className="text-xs line-clamp-1" style={{ color: 'var(--color-muted)' }}>{s.subtitle}</p>}
-                  </div>
-                </motion.button>
-              );
-            })}
-          </motion.div>
-        )}
-
-        {/* Full results */}
-        {query && !isSuggestionsOpen && (
-          <>
-            {/* Filter chips */}
-            <div className="flex gap-2 px-4 mb-4 overflow-x-auto scroll-x py-1 flex-shrink-0">
-              {tabs.map((tab) => (
-                <motion.button
-                  key={`tab-${tab}`}
-                  onClick={() => handleTabChange(tab)}
-                  whileTap={{ scale: 0.95 }}
-                  className="flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-pill text-xs font-bold transition-all"
-                  style={
-                    activeTab === tab
-                      ? { background: 'var(--color-primary)', color: 'white' }
-                      : { background: 'rgba(27,24,54,0.8)', color: 'var(--color-muted)', border: '1px solid rgba(40,36,77,0.7)' }
-                  }
-                >
-                  {TAB_ICONS[tab]}
-                  {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                </motion.button>
+    <Page title="Search" isTabRoot>
+      <div className="flex flex-col gap-6 px-5 pt-2 pb-[120px]">
+        {/* Type Filter Chips (Docked directly above search field via ControlStrip slot) */}
+        <ControlStrip>
+          <div className="flex items-center justify-between w-full">
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar flex-1 mr-2">
+              {types.map((type) => (
+                <Chip
+                  key={type}
+                  label={type.charAt(0).toUpperCase() + type.slice(1)}
+                  selected={activeType === type}
+                  onClick={() => setActiveType(type)}
+                />
               ))}
             </div>
+            <button
+              onClick={() => setFiltersOpen(true)}
+              className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 border ${
+                selectedLanguage !== 'All'
+                  ? 'bg-primary text-on-primary border-primary'
+                  : 'bg-surface-2 text-text border-line'
+              }`}
+              aria-label="Filter"
+            >
+              <SlidersHorizontal size={18} />
+            </button>
+          </div>
+        </ControlStrip>
 
-            {/* Error State */}
-            {searchError && !loading && (
-              <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-                <AlertCircle size={40} className="text-danger mb-3 opacity-80" />
-                <p className="text-text font-bold text-base mb-1">Search Error</p>
-                <p className="text-muted text-xs mb-4 max-w-xs">{searchError}</p>
+        {/* Floating Suggestions Panel */}
+        <AnimatePresence>
+          {query.trim().length > 0 && suggestions.length > 0 && !results && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              className="fixed bottom-[calc(var(--sab)+8px+64px+8px+56px+8px)] left-[12px] right-[12px] z-30 max-w-[456px] mx-auto bg-surface-3 surface-glass rounded-[24px] border border-line p-2 shadow-2xl overflow-hidden max-h-[280px] overflow-y-auto"
+            >
+              {suggestions.slice(0, 6).map((item, idx) => (
                 <button
-                  onClick={() => executeSearch(query.trim(), activeTab, 0)}
-                  className="flex items-center gap-2 bg-surface-2 border border-border px-4 py-2 rounded-full text-xs font-bold text-text hover:bg-surface"
+                  key={idx}
+                  onClick={() => {
+                    setQuery(item.text || item);
+                    setSuggestions([]);
+                  }}
+                  className="w-full h-[48px] px-4 flex items-center gap-3 hover:bg-surface-2 rounded-[16px] text-left transition-colors"
                 >
-                  <RefreshCw size={14} /> Retry Search
+                  <SearchIcon size={18} className="text-muted flex-shrink-0" />
+                  <span className="t-body text-[15px] font-medium text-text truncate">
+                    {item.text || item}
+                  </span>
                 </button>
-              </div>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* IDLE STATE (Query Empty) */}
+        {!query.trim() && (
+          <div className="flex flex-col gap-8">
+            {/* Recent Searches */}
+            {history.length > 0 && (
+              <section className="flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <h2 className="t-h2 text-[20px] font-bold text-text">Recent</h2>
+                  <Button variant="ghost" size="sm" onClick={handleClearHistory}>
+                    Clear all
+                  </Button>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  {history.slice(0, 8).map((item, idx) => (
+                    <div
+                      key={idx}
+                      onClick={() => setQuery(item.query)}
+                      className="w-full h-[52px] px-3 rounded-[16px] hover:bg-surface-2 flex items-center justify-between cursor-pointer transition-colors"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <Clock size={20} className="text-muted flex-shrink-0" />
+                        <span className="t-body text-[15px] text-text font-medium truncate">
+                          {item.query}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setQuery(item.query);
+                          }}
+                          className="p-2 text-muted hover:text-text"
+                          aria-label="Fill search"
+                        >
+                          <ArrowUpLeft size={18} />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteHistoryItem(item.query);
+                          }}
+                          className="p-2 text-muted hover:text-text"
+                          aria-label="Remove search"
+                        >
+                          <X size={18} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
             )}
 
-            {/* Loading Skeletons */}
-            {loading && !searchError && (
-              <div className="px-4 flex flex-col gap-2">
-                {[1, 2, 3, 4, 5].map((i) => (
-                  <div key={`skel-${i}`} className="flex items-center gap-3 py-2">
-                    <div className="shimmer w-12 h-12 rounded-xl flex-shrink-0" />
-                    <div className="flex-1">
-                      <div className="shimmer h-3.5 w-36 rounded mb-2" />
-                      <div className="shimmer h-3 w-24 rounded" />
-                    </div>
-                  </div>
+            {/* Browse By Language Grid */}
+            <section className="flex flex-col gap-3">
+              <h2 className="t-h2 text-[20px] font-bold text-text">Browse by language</h2>
+              <div className="grid grid-cols-2 gap-3">
+                {BROWSE_LANGUAGES.map((lang) => (
+                  <button
+                    key={lang.code}
+                    onClick={() => {
+                      setSelectedLanguage(lang.label);
+                      setQuery(lang.label);
+                    }}
+                    className={`h-[72px] rounded-[20px] bg-gradient-to-br ${lang.color} p-4 border border-line/40 flex flex-col justify-center text-left shadow-sm active:scale-98 transition-transform`}
+                  >
+                    <span className="t-h3 text-[16px] font-bold text-white">{lang.native}</span>
+                    <span className="t-cap text-[12px] text-white/70">{lang.label}</span>
+                  </button>
                 ))}
               </div>
+            </section>
+
+            {/* Trending Now */}
+            {trending.length > 0 && (
+              <section className="flex flex-col gap-3">
+                <h2 className="t-h2 text-[20px] font-bold text-text">Trending now</h2>
+                <div className="flex flex-col divide-y divide-line/20">
+                  {trending.slice(0, 5).map((song) => (
+                    <SongRow
+                      key={song.id}
+                      song={song}
+                      onPlay={() => handlePlaySong(song, trending)}
+                    />
+                  ))}
+                </div>
+              </section>
             )}
+          </div>
+        )}
 
-            {!loading && !searchError && results && (
-              <AnimatePresence mode="wait">
-                <motion.div key={activeTab} variants={fadeVariants} initial="initial" animate="animate" exit="exit">
-                  {/* Songs section */}
-                  {(activeTab === 'all' || activeTab === 'songs') && (activeTab === 'all' ? results.songs : results)?.length > 0 && (
-                    <div className="mb-4 px-4">
-                      {activeTab === 'all' && (
-                        <p className="text-xs font-bold uppercase tracking-wider mb-2 px-2" style={{ color: 'var(--color-muted)' }}>Songs</p>
-                      )}
-                      {(activeTab === 'all' ? results.songs : results).slice(0, activeTab === 'all' ? 5 : 50).map((song: any, _: number, arr: any[]) => (
-                        <SongRow key={`song-${song.id || song.saavnId}`} song={song} onPlay={() => handlePlay(song, arr)} />
+        {/* RESULTS STATE */}
+        {query.trim().length >= 2 && (
+          <div className="flex flex-col gap-6">
+            {loading ? (
+              <div className="flex flex-col gap-4">
+                {[1, 2, 3, 4, 5, 6].map((n) => (
+                  <div key={n} className="h-[64px] rounded-[16px] bg-surface-2 animate-pulse" />
+                ))}
+              </div>
+            ) : error ? (
+              <div className="py-12 flex flex-col items-center text-center gap-3">
+                <CircleAlert size={40} className="text-danger" />
+                <h2 className="t-h2 text-[20px] font-bold text-text">Search isn't working right now</h2>
+                <Button size="sm" onClick={() => setQuery(query)}>
+                  Retry
+                </Button>
+              </div>
+            ) : results ? (
+              <div className="flex flex-col gap-6">
+                {/* Songs Section */}
+                {results.songs?.length > 0 && (
+                  <section className="flex flex-col gap-2">
+                    <h2 className="t-h2 text-[20px] font-bold text-text">Songs</h2>
+                    <div className="flex flex-col">
+                      {results.songs.slice(0, activeType === 'all' ? 5 : 20).map((song: any) => (
+                        <SongRow
+                          key={song.id}
+                          song={song}
+                          onPlay={() => handlePlaySong(song, results.songs)}
+                        />
                       ))}
                     </div>
-                  )}
+                  </section>
+                )}
 
-                  {/* Albums section */}
-                  {(activeTab === 'all' || activeTab === 'albums') && (activeTab === 'all' ? results.albums : results)?.length > 0 && (
-                    <div className="mb-4 px-4">
-                      {activeTab === 'all' && (
-                        <p className="text-xs font-bold uppercase tracking-wider mb-2 px-2" style={{ color: 'var(--color-muted)' }}>Albums</p>
-                      )}
-                      {(activeTab === 'all' ? results.albums : results).slice(0, activeTab === 'all' ? 4 : 50).map((item: any) => (
-                        <EntityRow key={`album-${item.id}`} item={item} type="albums" onClick={() => navigate(`/album/${item.id}`)} />
+                {/* Albums Rail */}
+                {results.albums?.length > 0 && (
+                  <section className="flex flex-col gap-3">
+                    <h2 className="t-h2 text-[20px] font-bold text-text">Albums</h2>
+                    <div className="flex gap-3 overflow-x-auto no-scrollbar">
+                      {results.albums.map((album: any) => (
+                        <MediaCard
+                          key={album.id}
+                          id={album.id}
+                          title={album.name}
+                          subtitle={album.artist}
+                          image={album.image}
+                          type="album"
+                          onClick={() => navigate(`/album/${album.id}`)}
+                        />
                       ))}
                     </div>
-                  )}
+                  </section>
+                )}
 
-                  {/* Artists section */}
-                  {(activeTab === 'all' || activeTab === 'artists') && (activeTab === 'all' ? results.artists : results)?.length > 0 && (
-                    <div className="mb-4 px-4">
-                      {activeTab === 'all' && (
-                        <p className="text-xs font-bold uppercase tracking-wider mb-2 px-2" style={{ color: 'var(--color-muted)' }}>Artists</p>
-                      )}
-                      {(activeTab === 'all' ? results.artists : results).slice(0, activeTab === 'all' ? 4 : 50).map((item: any) => (
-                        <EntityRow key={`artist-${item.id}`} item={item} type="artists" onClick={() => navigate(`/artist/${item.id}`)} />
+                {/* Artists Rail */}
+                {results.artists?.length > 0 && (
+                  <section className="flex flex-col gap-3">
+                    <h2 className="t-h2 text-[20px] font-bold text-text">Artists</h2>
+                    <div className="flex gap-3 overflow-x-auto no-scrollbar">
+                      {results.artists.map((artist: any) => (
+                        <ArtistCircle
+                          key={artist.id}
+                          id={artist.id}
+                          name={artist.name}
+                          image={artist.image}
+                          onClick={() => navigate(`/artist/${artist.id}`)}
+                        />
                       ))}
                     </div>
-                  )}
+                  </section>
+                )}
 
-                  {/* Playlists section */}
-                  {(activeTab === 'all' || activeTab === 'playlists') && (activeTab === 'all' ? results.playlists : results)?.length > 0 && (
-                    <div className="mb-4 px-4">
-                      {activeTab === 'all' && (
-                        <p className="text-xs font-bold uppercase tracking-wider mb-2 px-2" style={{ color: 'var(--color-muted)' }}>Playlists</p>
-                      )}
-                      {(activeTab === 'all' ? results.playlists : results).slice(0, activeTab === 'all' ? 4 : 50).map((item: any) => (
-                        <EntityRow key={`playlist-${item.id}`} item={item} type="playlists" onClick={() => navigate(`/playlist/${item.id}`)} />
-                      ))}
+                {/* Empty Results */}
+                {(!results.songs?.length && !results.albums?.length && !results.artists?.length) && (
+                  <div className="py-16 flex flex-col items-center text-center gap-3">
+                    <div className="w-[72px] h-[72px] rounded-full bg-surface-2 flex items-center justify-center text-muted">
+                      <SearchIcon size={32} />
                     </div>
-                  )}
-
-                  {/* No results */}
-                  {!hasResults && (
-                    <div className="flex flex-col items-center py-16 px-4">
-                      <SearchIcon size={48} style={{ color: 'var(--color-muted)' }} className="mb-4 opacity-40" />
-                      <p className="font-semibold text-base mb-1" style={{ color: 'var(--color-text)' }}>No results for</p>
-                      <p className="font-bold text-lg" style={{ color: 'var(--color-primary-soft)' }}>"{query}"</p>
-                      <p className="text-sm mt-2 text-center" style={{ color: 'var(--color-muted)' }}>Try a different spelling or keyword</p>
-                    </div>
-                  )}
-
-                  {/* Load More Button */}
-                  {hasResults && activeTab !== 'all' && hasMore && (
-                    <div className="px-4 pb-8 pt-2">
-                      <motion.button
-                        whileTap={{ scale: 0.97 }}
-                        onClick={handleLoadMore}
-                        disabled={loadingMore}
-                        className="w-full py-3.5 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all"
-                        style={{ 
-                          background: loadingMore ? 'rgba(255,255,255,0.05)' : 'var(--color-surface-2)', 
-                          color: 'var(--color-text)', 
-                          border: '1px solid rgba(40,36,77,0.6)' 
-                        }}
+                    <h2 className="t-h2 text-[20px] font-bold text-text">No results for "{query}"</h2>
+                    <p className="t-cap text-[13px] text-muted max-w-[280px]">
+                      Check the spelling or try a different language filter.
+                    </p>
+                    {selectedLanguage !== 'All' && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setSelectedLanguage('All')}
+                        className="mt-2"
                       >
-                        {loadingMore ? (
-                          <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                        ) : 'Load More'}
-                      </motion.button>
-                    </div>
-                  )}
-                </motion.div>
-              </AnimatePresence>
-            )}
-          </>
+                        Clear filters
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </div>
         )}
       </div>
-    </div>
+
+      {/* Docked Search Input Field at Bottom */}
+      <div className="fixed bottom-[calc(var(--sab)+8px+64px+8px)] left-[12px] right-[12px] z-20 max-w-[456px] mx-auto h-[56px] rounded-[28px] bg-surface border border-line surface-glass shadow-xl flex items-center px-4">
+        <SearchIcon size={22} className="text-muted mr-3 flex-shrink-0" />
+        <input
+          ref={inputRef}
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search songs, albums, artists"
+          className="w-full bg-transparent outline-none text-text t-body text-[16px] font-medium"
+        />
+        {query && (
+          <button
+            onClick={() => setQuery('')}
+            className="w-10 h-10 rounded-full flex items-center justify-center text-muted hover:text-text"
+            aria-label="Clear search field"
+          >
+            <X size={20} />
+          </button>
+        )}
+      </div>
+
+      {/* Filters Bottom Sheet (§9.8) */}
+      <Sheet
+        id="search-filters-sheet"
+        isOpen={filtersOpen}
+        onClose={() => setFiltersOpen(false)}
+        title="Search filters"
+      >
+        <div className="flex flex-col gap-6 py-2">
+          <div className="flex flex-col gap-2">
+            <h3 className="t-h3 text-[16px] font-semibold text-text">Language</h3>
+            <div className="flex items-center gap-2 flex-wrap">
+              {['All', 'Hindi', 'Telugu', 'Tamil', 'Kannada', 'Malayalam', 'Bengali'].map((lang) => (
+                <Chip
+                  key={lang}
+                  label={lang}
+                  selected={selectedLanguage === lang}
+                  onClick={() => setSelectedLanguage(lang)}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-4 border-t border-line">
+            <Button variant="ghost" onClick={() => setSelectedLanguage('All')}>
+              Reset
+            </Button>
+            <Button onClick={() => setFiltersOpen(false)}>
+              Apply
+            </Button>
+          </div>
+        </div>
+      </Sheet>
+    </Page>
   );
 }
