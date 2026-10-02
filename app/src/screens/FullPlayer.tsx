@@ -1,22 +1,26 @@
-import { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence, useDragControls } from 'framer-motion';
+import { useState, useEffect } from 'react';
+import type { PanInfo } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { usePlayerStore } from '@/store/player';
-import { useProgressStore } from '@/store/progress';
-import { playlists } from '@/api/endpoints';
 import {
-  ChevronDown, Heart, MoreHorizontal, SkipBack, SkipForward,
-  Play, Pause, Shuffle, Repeat, Repeat1, Share2, Download, Plus, ListMusic, Info
+  ChevronDown, EllipsisVertical, Heart, Play, Pause, SkipBack, SkipForward,
+  Shuffle, Repeat, Repeat1, Headphones, Timer, Gauge, ListMusic, Palette,
+  FolderPlus, Download, Disc3, Mic2, Info, Check, Type
 } from 'lucide-react';
-import { springs } from '@/motion';
-import { VinaraaPlayer } from '@/native/player';
+import { usePlayerStore } from '@/store/player';
+import type { Song } from '@/store/player';
+import { useProgressStore } from '@/store/progress';
+import { usePrefsStore } from '@/store/prefs';
+import type { PlayerStyle } from '@/store/prefs';
 import { useUIStore } from '@/store/ui';
+import { playlists, music } from '@/api/endpoints';
 import Marquee from '@/components/Marquee';
+import EqBars from '@/components/EqBars';
+import { Sheet } from '@/components/SheetHost';
+import SaveToPlaylistSheet from '@/components/SaveToPlaylistSheet';
 import QueueSheet from '@/components/QueueSheet';
-import { saveDownloadedSong } from '@/utils/offline';
-import { getCachedLyrics, setCachedLyrics, fetchLrclib } from '@/utils/lyrics';
-
-type PlayerTab = 'photo' | 'lyrics' | 'info';
+import Button from '@/components/Button';
+import Chip from '@/components/Chip';
 
 function formatTime(ms: number) {
   if (!ms || isNaN(ms)) return '0:00';
@@ -24,511 +28,708 @@ function formatTime(ms: number) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-import { useShallow } from 'zustand/react/shallow';
+const STYLES_LIST: { id: PlayerStyle; name: string; desc: string }[] = [
+  { id: 'cinematic', name: 'Cinematic', desc: 'Full-bleed artwork, big controls' },
+  { id: 'glass', name: 'Glass', desc: 'Floating art on a frosted panel' },
+  { id: 'vinyl', name: 'Vinyl', desc: 'A spinning record with a tonearm' },
+  { id: 'classic', name: 'Classic', desc: 'Clean and minimal' },
+  { id: 'lyrics', name: 'Lyrics stage', desc: 'Lyrics first, controls tucked below' },
+];
 
 export default function FullPlayer() {
-  const {
-    isPlaying,
-    repeat, shuffle, togglePlay, seekTo, nextTrack, previousTrack,
-    setRepeat, setShuffle, currentSong
-  } = usePlayerStore(
-    useShallow((s) => ({
-      isPlaying: s.isPlaying,
-      repeat: s.repeat,
-      shuffle: s.shuffle,
-      togglePlay: s.togglePlay,
-      seekTo: s.seekTo,
-      nextTrack: s.nextTrack,
-      previousTrack: s.previousTrack,
-      setRepeat: s.setRepeat,
-      setShuffle: s.setShuffle,
-      currentSong: s.currentSong,
-    }))
-  );
-  const { positionMs, durationMs } = useProgressStore(
-    useShallow((s) => ({
-      positionMs: s.positionMs,
-      durationMs: s.durationMs,
-    }))
-  );
   const navigate = useNavigate();
-  const { addToast } = useUIStore();
-  const [playerTab, setPlayerTab] = useState<PlayerTab>('photo');
+  const addToast = useUIStore((s) => s.addToast);
+  const setPlayerLyricsOpen = useUIStore((s) => s.setPlayerLyricsOpen);
+  const setPlayerInfoOpen = useUIStore((s) => s.setPlayerInfoOpen);
+
+  const { playerStyle, setPlayerStyle } = usePrefsStore();
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const togglePlay = usePlayerStore((s) => s.togglePlay);
+  const nextTrack = usePlayerStore((s) => s.nextTrack);
+  const previousTrack = usePlayerStore((s) => s.previousTrack);
+  const repeat = usePlayerStore((s) => s.repeat);
+  const setRepeat = usePlayerStore((s) => s.setRepeat);
+  const shuffle = usePlayerStore((s) => s.shuffle);
+  const setShuffle = usePlayerStore((s) => s.setShuffle);
+  const seekTo = usePlayerStore((s) => s.seekTo);
+  const queue = usePlayerStore((s) => s.queue);
+  const currentIndex = usePlayerStore((s) => s.currentIndex);
+
+  const { positionMs, durationMs } = useProgressStore();
+
+  const song: Song | null = queue[currentIndex] || null;
+  const effectiveDuration = durationMs > 0 ? durationMs : song?.durationMs || 0;
+  const progress = effectiveDuration ? Math.min(1, positionMs / effectiveDuration) : 0;
+
+  // States
   const [liked, setLiked] = useState(false);
-  const [lyrics, setLyrics] = useState<any>(null);
-  const [seeking, setSeeking] = useState(false);
-  const [seekValue, setSeekValue] = useState(0);
-  const [showQueueSheet, setShowQueueSheet] = useState(false);
-  const [showTopMenu, setShowTopMenu] = useState(false);
+  const [lyricsOpen, setLyricsOpen] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const [stylePickerOpen, setStylePickerOpen] = useState(false);
+  const [queueOpen, setQueueOpen] = useState(false);
+  const [savePlaylistOpen, setSavePlaylistOpen] = useState(false);
 
-  const lyricsContainerRef = useRef<HTMLDivElement>(null);
-  const dragControls = useDragControls();
+  // Sleep timer & speed
+  const [sleepTimerMinutes, setSleepTimerMinutes] = useState<number | null>(null);
+  const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
+  const [timerSheetOpen, setTimerSheetOpen] = useState(false);
+  const [speedSheetOpen, setSpeedSheetOpen] = useState(false);
 
-  const song = currentSong();
+  // Lyrics data
+  const [lyricsData, setLyricsData] = useState<any>(null);
+  const [lyricsFontSize, setLyricsFontSize] = useState<number>(22);
+
+  // Dragging seek bar
+  const [draggingSeek, setDraggingSeek] = useState(false);
+  const [seekFraction, setSeekFraction] = useState(0);
 
   useEffect(() => {
-    if (!song?.id) return;
-    playlists.isLiked(song.id).then((res) => setLiked(res.liked)).catch(() => {});
+    if (song?.id) {
+      playlists.isLiked(song.id).then((l) => setLiked(Boolean(l))).catch(() => {});
+      music.lyrics(song.id).then((lRes: any) => setLyricsData(lRes)).catch(() => setLyricsData(null));
+    }
   }, [song?.id]);
 
-  // VINARAA-FIX: reset lyrics when song changes, use utils/lyrics for fetch and cache with AbortController
   useEffect(() => {
-    setLyrics(null);
-  }, [song?.id]);
+    setPlayerLyricsOpen(lyricsOpen);
+  }, [lyricsOpen, setPlayerLyricsOpen]);
 
-  const fetchLyricsData = async (forceSearch = false) => {
-    if (!song?.id) return;
+  useEffect(() => {
+    setPlayerInfoOpen(infoOpen);
+  }, [infoOpen, setPlayerInfoOpen]);
+
+  if (!song) {
+    return (
+      <div className="flex flex-col h-full bg-bg items-center justify-center p-5 text-center">
+        <p className="t-body text-muted">No song loaded</p>
+        <Button size="sm" onClick={() => navigate(-1)} className="mt-4">
+          Go back
+        </Button>
+      </div>
+    );
+  }
+
+  const handleToggleLike = async () => {
+    const next = !liked;
+    setLiked(next);
     try {
-      if (!forceSearch) {
-        const cached = await getCachedLyrics(song.id);
-        if (cached) {
-          setLyrics(cached);
-          return;
-        }
-      }
-      setLyrics(null); // Show loading
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6000);
-      const data = await fetchLrclib(song.name, song.artist.split(',')[0], durationMs || song.durationMs || 0, controller.signal);
-      clearTimeout(timeoutId);
-      
-      if (data) {
-        setLyrics(data);
-        await setCachedLyrics(song.id, data);
-      } else {
-        setLyrics({ notFound: true });
-        await setCachedLyrics(song.id, { notFound: true });
-      }
-    } catch {
-      setLyrics({ notFound: true });
+      await playlists.like(song.id, next);
+      addToast(next ? 'Added to Liked Songs' : 'Removed from Liked Songs', 'info');
+    } catch (_e) {
+      setLiked(!next);
     }
   };
 
-  // VINARAA-FIX: call fetchLyricsData when lyrics tab is open
-  useEffect(() => {
-    if (playerTab === 'lyrics' && song?.id && !lyrics) {
-      fetchLyricsData();
-    }
-  }, [playerTab, song?.id, lyrics]);
-
-  // VINARAA-FIX: calculate activeLyricIndex to prevent unnecessary scrolling
-  const activeLyricIndex = lyrics?.type === 'synced' ? lyrics.lines.findIndex((l: any, i: number) => {
-    return (positionMs / 1000) >= l.t && (i === lyrics.lines.length - 1 || (positionMs / 1000) < lyrics.lines[i + 1].t);
-  }) : -1;
-
-  useEffect(() => {
-    if (playerTab === 'lyrics' && lyrics?.type === 'synced' && lyricsContainerRef.current && activeLyricIndex !== -1) {
-      const activeEl = lyricsContainerRef.current.querySelector('#active-lyric');
-      if (activeEl) {
-        const container = lyricsContainerRef.current;
-        const scrollTarget = (activeEl as HTMLElement).offsetTop - container.clientHeight / 2 + (activeEl as HTMLElement).clientHeight / 2;
-        container.scrollTo({ top: scrollTarget, behavior: 'smooth' });
-      }
-    }
-  }, [activeLyricIndex, playerTab, lyrics]);
-
-  const seekValRef = useRef(0);
-  const effectiveDuration = durationMs > 0 ? durationMs : (song?.durationMs || 0);
-  const progress = effectiveDuration ? (seeking ? seekValue : positionMs / effectiveDuration) : 0;
-
-  const handleSeekChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = Number(e.target.value);
-    seekValRef.current = val;
-    setSeeking(true);
-    setSeekValue(val);
-  };
-
-  const commitSeek = () => {
-    if (!effectiveDuration || effectiveDuration <= 0) {
-      setSeeking(false);
-      return;
-    }
-    const targetFraction = seekValRef.current;
-    const newPos = Math.round(Math.max(0, Math.min(effectiveDuration - 500, targetFraction * effectiveDuration)));
-    seekTo(newPos);
-    useProgressStore.setState({ positionMs: newPos });
-    setSeeking(false);
-  };
-
-  const toggleRepeat = () => {
+  const handleToggleRepeat = () => {
     if (repeat === 'off') setRepeat('all');
     else if (repeat === 'all') setRepeat('one');
     else setRepeat('off');
   };
 
-  const handleLike = () => {
-    if (!song?.id) return;
-    const newLiked = !liked;
-    setLiked(newLiked);
-    playlists.like(song.id, newLiked).catch(() => setLiked(!newLiked));
-  };
-
-  const TABS: PlayerTab[] = ['photo', 'lyrics', 'info'];
-  const handleSwipeTabs = (_: any, info: any) => {
-    const idx = TABS.indexOf(playerTab);
-    if (info.offset.x < -40 && idx < TABS.length - 1) setPlayerTab(TABS[idx + 1]);
-    if (info.offset.x > 40 && idx > 0) setPlayerTab(TABS[idx - 1]);
-  };
-
-  const handleShare = async () => {
-    if (!song) return;
-    try {
-      if (navigator.share) await navigator.share({ title: `Listen to ${song.name}`, url: window.location.href });
-    } catch (e) { console.error(e); }
-    setShowTopMenu(false);
-  };
-
-  const handleDownload = async () => {
-    if (!song?.streamUrl) {
-      addToast('Download URL unavailable', 'error');
-      return;
+  const handleSeekCommit = () => {
+    if (effectiveDuration) {
+      const targetMs = Math.round(seekFraction * effectiveDuration);
+      seekTo(targetMs);
     }
-    try {
-      addToast(`Downloading ${song.name}…`, 'info');
-      const safeName = song.name.replace(/[^a-zA-Z0-9.\-_ \(\)]/g, '');
-      const res = await VinaraaPlayer.download({ url: song.streamUrl, title: song.name, fileName: `${safeName}.mp3` });
-      await saveDownloadedSong({
-        id: song.id,
-        name: song.name,
-        artist: song.artist,
-        image: song.image,
-        durationMs: song.durationMs,
-        streamUrl: song.streamUrl,
-        localPath: res.path,
-        downloadedAt: Date.now(),
-      });
-      addToast('Download completed', 'success');
-    } catch (e: any) {
-      addToast(e?.message || 'Download failed', 'error');
-    }
-    setShowTopMenu(false);
+    setDraggingSeek(false);
   };
 
-  const [showSaveSheet, setShowSaveSheet] = useState(false);
-  const [userPlaylists, setUserPlaylists] = useState<any[]>([]);
-  const [suggestedName, setSuggestedName] = useState('');
+  const activeStyle = (playerStyle === 'lyrics' && !lyricsData?.lines?.length) ? 'cinematic' : playerStyle;
 
-  const handleSaveToPlaylistClick = async () => {
-    if (!song) return;
-    setShowSaveSheet(true);
-    setShowTopMenu(false);
-    try {
-      const [plRes, nameRes] = await Promise.all([
-        playlists.list(),
-        playlists.nameSuggestion()
-      ]);
-      setUserPlaylists(Array.isArray(plRes) ? plRes.filter((p: any) => !p.isSystem) : (plRes?.items || []).filter((p: any) => !p.isSystem));
-      setSuggestedName(nameRes?.suggestedName || 'New Playlist');
-    } catch (e) {
-      console.error(e);
-    }
-  };
+  // Gestures for Art Zone
+  const handleArtDragEnd = (_: any, info: PanInfo) => {
+    const dy = info.offset.y;
+    const dx = info.offset.x;
 
-  const handleAddToPlaylist = async (playlistId?: string) => {
-    if (!song) return;
-    try {
-      const s = song as any;
-      const targetSongId = s.id || s.saavnId || s.songId;
-      if (playlistId) {
-        await playlists.saveSong({ songId: targetSongId, playlistId });
-      } else {
-        await playlists.saveSong({ songId: targetSongId, newPlaylistName: suggestedName });
+    if (Math.abs(dy) > Math.abs(dx) * 1.4) {
+      if (dy < -80 || info.velocity.y < -500) {
+        setLyricsOpen(true);
+      } else if (dy > 100 || info.velocity.y > 600) {
+        navigate(-1);
       }
-      setShowSaveSheet(false);
-      addToast('Added to playlist', 'success');
-    } catch (e: any) {
-      addToast(e?.message || 'Failed to add to playlist', 'error');
+    } else {
+      if (dx < -60) nextTrack();
+      else if (dx > 60) previousTrack();
     }
   };
 
-  if (!song) {
-    return (
-      <div className="flex flex-col h-full bg-bg items-center justify-center">
-        <p className="text-muted">No song selected</p>
-        <button onClick={() => { navigate(-1); }} className="mt-4 text-primary-soft">Go Back</button>
-      </div>
-    );
-  }
+  // Gestures for Controls Zone
+  const handleControlsDragEnd = (_: any, info: PanInfo) => {
+    const dy = info.offset.y;
+    if (dy < -60 || info.velocity.y < -500) {
+      setInfoOpen(true);
+    } else if (dy > 100 || info.velocity.y > 600) {
+      navigate(-1);
+    }
+  };
 
   return (
-    <motion.div
-      className="flex flex-col h-full bg-bg overflow-hidden relative z-50"
-      initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-      transition={springs.sheet}
-      drag="y"
-      dragConstraints={{ top: 0, bottom: 0 }}
-      dragElastic={0.4}
-      dragListener={false}
-      dragControls={dragControls}
-      onDragEnd={(_, info) => { if (info.offset.y > 100) { navigate(-1); } }}
-    >
-      <div 
-        className="flex items-center justify-between px-5 pt-4 pb-2"
-        style={{ paddingTop: `calc(env(safe-area-inset-top) + 16px)` }}
-        onPointerDown={(e) => dragControls.start(e)}
-      >
-        <button onClick={() => { navigate(-1); }} className="p-2 -ml-2" aria-label="Close player">
-          <ChevronDown size={28} className="text-text" />
-        </button>
-        <div className="w-12 h-1.5 bg-border rounded-full opacity-50 absolute left-1/2 -translate-x-1/2 top-4" />
-        <p className="text-muted text-[10px] uppercase tracking-widest font-bold">Now Playing</p>
-        <button onClick={() => setShowTopMenu(true)} className="p-2 -mr-2" aria-label="More options">
-          <MoreHorizontal size={26} className="text-text" />
-        </button>
-      </div>
-
-      <div className="flex mx-5 bg-surface-2 rounded-full p-1 mb-4 mt-2">
-        {TABS.map((tab) => (
-          <button key={tab} onClick={() => setPlayerTab(tab)}
-            className={`flex-1 py-1.5 rounded-full text-xs font-bold transition-all capitalize ${playerTab === tab ? 'bg-primary text-white shadow-colored' : 'text-muted'}`}>
-            {tab}
-          </button>
-        ))}
-      </div>
-
-      <motion.div 
-        className="flex-1 px-5 min-h-0 w-full"
-        drag="x" dragConstraints={{ left: 0, right: 0 }} dragElastic={0.2}
-        onDragEnd={handleSwipeTabs}
-      >
-        <AnimatePresence mode="wait">
-          {playerTab === 'photo' && (
-            <motion.div key="photo" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="flex flex-col items-center justify-center h-full touch-none"
-              onPointerDown={(e) => dragControls.start(e)}>
-              <motion.div
-                className="w-full aspect-square max-w-[320px] rounded-[32px] overflow-hidden shadow-[0_20px_50px_-12px_rgba(139,61,255,0.4)]"
-                animate={isPlaying ? { scale: [1, 1.02, 1] } : { scale: 1 }}
-                transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
-              >
-                {song.image ? (
-                  <img src={song.image} alt={song.name} className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full bg-surface-2 flex items-center justify-center">
-                    <Play size={48} className="text-muted" />
-                  </div>
-                )}
-              </motion.div>
-            </motion.div>
+    <div className="relative w-full h-full bg-bg overflow-hidden flex flex-col justify-between select-none">
+      {/* Background for Glass style */}
+      {activeStyle === 'glass' && (
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          {song.image && (
+            <img
+              src={song.image}
+              alt=""
+              className="absolute inset-0 w-[140%] h-[140%] -left-[20%] -top-[20%] object-cover blur-3xl opacity-55"
+            />
           )}
-          {playerTab === 'lyrics' && (
-            <motion.div key="lyrics" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              ref={lyricsContainerRef}
-              className="h-full overflow-y-auto scroll-y text-center py-4 px-2 select-none relative"
-              onPointerDown={(e) => e.stopPropagation()}>
-              {/* VINARAA-FIX: Added empty state with Search again button */}
-              {!lyrics ? <p className="text-muted pt-20">Loading lyrics…</p>
-                : lyrics.notFound ? (
-                  <div className="flex flex-col items-center justify-center pt-20 gap-4">
-                    <p className="text-muted">No lyrics found.</p>
-                    <button onClick={() => fetchLyricsData(true)} className="px-6 py-2 bg-surface-2 border border-border rounded-pill text-sm font-semibold">Search again</button>
-                  </div>
-                )
-                : lyrics.type === 'synced' ? (
-                  <div className="flex flex-col gap-4 pb-[50vh] pt-[25vh]">
-                    {lyrics.lines.map((l: any, i: number) => {
-                      const isActive = i === activeLyricIndex;
-                      return (
-                        <p key={i} id={isActive ? 'active-lyric' : undefined} 
-                          className={`text-2xl font-bold transition-all duration-500 ease-out ${isActive ? 'text-primary-soft scale-110 drop-shadow-[0_0_12px_rgba(139,61,255,0.8)]' : 'text-text/30'}`}>
-                          {l.x}
-                        </p>
-                      );
-                    })}
-                  </div>
-                ) : lyrics.type === 'plain' ? (
-                  <pre className="text-text/80 font-sans text-lg leading-10 whitespace-pre-wrap pb-[30vh] pt-4">{lyrics.lyrics}</pre>
-                ) : null}
-            </motion.div>
-          )}
-          {playerTab === 'info' && (
-            <motion.div key="info" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="h-full overflow-y-auto scroll-y py-4 flex flex-col gap-6 px-2 pb-32"
-              onPointerDown={(e) => e.stopPropagation()}>
-              {song.album && (
-                <div>
-                  <p className="text-muted text-xs uppercase tracking-wider mb-1">Album / Movie</p>
-                  <p className="text-text font-semibold text-lg">{song.album}</p>
-                </div>
-              )}
-              {song.singers && song.singers.length > 0 && (
-                <div>
-                  <p className="text-muted text-xs uppercase tracking-wider mb-1">Singer(s)</p>
-                  <div className="flex flex-wrap gap-2 mt-1.5">
-                    {song.singers.map((a: any) => (
-                      <span key={a.id} className="bg-surface-2 border border-border text-text px-4 py-1.5 rounded-full text-sm font-medium">{a.name}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <div className="flex gap-8">
-                {song.language && (
-                  <div>
-                    <p className="text-muted text-xs uppercase tracking-wider mb-1">Language</p>
-                    <p className="text-text font-semibold capitalize">{song.language}</p>
-                  </div>
-                )}
-                <div>
-                  <p className="text-muted text-xs uppercase tracking-wider mb-1">Duration</p>
-                  <p className="text-text font-semibold">{formatTime(durationMs)}</p>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.div>
-
-      <div className="px-6 py-2 flex items-center justify-between bg-gradient-to-t from-bg via-bg to-transparent">
-        <div className="min-w-0 pr-4 flex-1 overflow-hidden">
-          <Marquee text={song.name} className="text-text text-2xl font-bold leading-tight" />
-          <p className="text-muted text-sm font-medium line-clamp-1 mt-1">{song.artist}</p>
         </div>
-        <motion.button
-          onClick={handleLike}
-          whileTap={{ scale: 1.35 }}
-          transition={{ type: 'spring' as const, stiffness: 500, damping: 15 }}
-          className="p-3 bg-surface-2 rounded-full border border-border flex-shrink-0 ml-2"
-          aria-label={liked ? 'Unlike' : 'Like'}
+      )}
+
+      {/* ZONE A: TOP BAR */}
+      <header className="relative z-20 flex items-center justify-between px-4 pt-[calc(var(--sat)+8px)] h-[48px]">
+        <button
+          onClick={() => navigate(-1)}
+          className="w-11 h-11 rounded-full bg-black/35 backdrop-blur-md flex items-center justify-center text-white"
+          aria-label="Collapse player"
         >
-          <Heart size={24} fill={liked ? '#FF3D8E' : 'none'} className={liked ? 'text-[#FF3D8E]' : 'text-text'} />
-        </motion.button>
-      </div>
+          <ChevronDown size={28} />
+        </button>
 
-      <div className="px-6 mb-2 mt-2">
-        <input
-          type="range" min={0} max={1} step={0.001}
-          value={seeking ? seekValue : progress}
-          onPointerDown={(e) => {
-            const val = Number((e.target as HTMLInputElement).value);
-            seekValRef.current = val;
-            setSeeking(true);
-            setSeekValue(val);
-          }}
-          onChange={handleSeekChange}
-          onPointerUp={commitSeek}
-          onTouchEnd={commitSeek}
-          disabled={!effectiveDuration}
-          className="w-full h-1.5 appearance-none rounded-full outline-none cursor-pointer bg-surface-2"
-          style={{ backgroundImage: `linear-gradient(to right, #8B3DFF ${progress * 100}%, transparent ${progress * 100}%)` }}
-          aria-label="Seek"
-        />
-        <div className="flex justify-between mt-2">
-          <span className="text-muted text-xs font-medium tracking-wide">{formatTime(positionMs)}</span>
-          <span className="text-muted text-xs font-medium tracking-wide">{formatTime(effectiveDuration)}</span>
+        <div className="flex flex-col items-center text-center">
+          <span className="t-cap text-[12px] text-muted font-medium">Playing from</span>
+          <span className="t-h3 text-[14px] font-bold text-text truncate max-w-[180px]">
+            Your Queue
+          </span>
         </div>
-      </div>
 
-      <div className="px-6 pb-2">
-        <div className="flex items-center justify-between mb-2">
-          <button onClick={() => setShuffle(!shuffle)} className="p-2" aria-label="Shuffle">
-            <Shuffle size={24} className={shuffle ? 'text-primary-soft' : 'text-muted'} />
-          </button>
-          <button onClick={previousTrack} className="p-2" aria-label="Previous">
-            <SkipBack size={36} className="text-text" fill="currentColor" />
-          </button>
-          <motion.button
-            onClick={() => togglePlay()}
-            whileTap={{ scale: 0.92 }}
-            className="bg-primary rounded-full flex items-center justify-center shadow-[0_8px_30px_rgba(139,61,255,0.5)]"
-            aria-label={isPlaying ? 'Pause' : 'Play'}
-            style={{ width: 80, height: 80 }}
-          >
-            <AnimatePresence mode="wait">
-              {isPlaying ? (
-                <motion.div key="pause" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}>
-                  <Pause size={38} fill="white" className="text-white" />
-                </motion.div>
-              ) : (
-                <motion.div key="play" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}>
-                  <Play size={38} fill="white" className="text-white ml-2" />
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </motion.button>
-          <button onClick={nextTrack} className="p-2" aria-label="Next">
-            <SkipForward size={36} className="text-text" fill="currentColor" />
-          </button>
-          <button onClick={toggleRepeat} className="p-2" aria-label="Repeat">
-            {repeat === 'one' ? <Repeat1 size={24} className="text-primary-soft" /> : <Repeat size={24} className={repeat === 'all' ? 'text-primary-soft' : 'text-muted'} />}
-          </button>
-        </div>
-        <div className="flex items-center justify-center gap-6 mt-4 pb-2">
-          <button onClick={() => setShowQueueSheet(true)} className="p-3 bg-surface-2 rounded-full border border-border" aria-label="Playing Queue">
-            <ListMusic size={20} className="text-primary-soft" />
-          </button>
-          <button onClick={handleSaveToPlaylistClick} className="p-3 bg-surface-2 rounded-full border border-border" aria-label="Add to playlist"><Plus size={20} className="text-text" /></button>
-          <button onClick={handleDownload} className="p-3 bg-surface-2 rounded-full border border-border" aria-label="Download"><Download size={20} className="text-text" /></button>
-          <button onClick={handleShare} className="p-3 bg-surface-2 rounded-full border border-border" aria-label="Share"><Share2 size={20} className="text-text" /></button>
-        </div>
-      </div>
-      <div style={{ paddingBottom: 'env(safe-area-inset-bottom)' }} />
+        <button
+          onClick={() => setOptionsOpen(true)}
+          className="w-11 h-11 rounded-full bg-black/35 backdrop-blur-md flex items-center justify-center text-white"
+          aria-label="Player options"
+        >
+          <EllipsisVertical size={22} />
+        </button>
+      </header>
 
-      {/* Queue Drawer Sheet */}
-      <QueueSheet isOpen={showQueueSheet} onClose={() => setShowQueueSheet(false)} />
+      {/* ZONE B: ART ZONE */}
+      <motion.div
+        drag
+        dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
+        dragElastic={0.3}
+        onDragEnd={handleArtDragEnd}
+        className="relative z-10 flex-1 flex items-center justify-center px-6 py-4 cursor-grab active:cursor-grabbing"
+      >
+        {/* Style 1: Cinematic */}
+        {activeStyle === 'cinematic' && (
+          <div className="absolute inset-0 pointer-events-none">
+            {song.image && (
+              <img
+                src={song.image}
+                alt=""
+                className="w-full h-[560px] object-cover object-[center_20%]"
+              />
+            )}
+            <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-bg" />
+          </div>
+        )}
 
-      {/* Top 3-Dots Header Options Sheet */}
-      <AnimatePresence>
-        {showTopMenu && (
-          <div className="absolute inset-0 z-50 flex flex-col justify-end">
-            <motion.div className="absolute inset-0 bg-black/60 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowTopMenu(false)} />
+        {/* Style 2: Glass Card */}
+        {activeStyle === 'glass' && (
+          <div className="relative w-[280px] h-[280px] rounded-[32px] overflow-hidden shadow-2xl border border-white/20">
+            {song.image ? (
+              <motion.img
+                layoutId="player-art"
+                src={song.image}
+                alt={song.name}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full bg-surface-2 flex items-center justify-center text-muted">🎵</div>
+            )}
+          </div>
+        )}
+
+        {/* Style 3: Vinyl */}
+        {activeStyle === 'vinyl' && (
+          <div className="relative w-[296px] h-[296px] flex items-center justify-center">
             <motion.div
-              className="bg-surface/95 border-t border-border rounded-t-3xl p-5 pb-safe z-10 flex flex-col gap-3 shadow-2xl"
-              initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-              transition={springs.sheet}
+              animate={{ rotate: isPlaying ? 360 : 0 }}
+              transition={{ duration: 12, ease: 'linear', repeat: Infinity }}
+              className="w-[296px] h-[296px] rounded-full bg-[#0B0B0D] border-[6px] border-[#16161A] shadow-2xl flex items-center justify-center relative overflow-hidden"
             >
-              <div className="w-12 h-1.5 bg-border rounded-full opacity-50 mx-auto mb-2" />
-              <button onClick={handleShare} className="flex items-center gap-4 py-3 px-3 rounded-xl hover:bg-surface-2 font-bold text-sm text-text"><Share2 size={20} className="text-primary-soft" /> Share Song</button>
-              <button onClick={handleDownload} className="flex items-center gap-4 py-3 px-3 rounded-xl hover:bg-surface-2 font-bold text-sm text-text"><Download size={20} className="text-primary-soft" /> Download Song</button>
-              <button onClick={handleSaveToPlaylistClick} className="flex items-center gap-4 py-3 px-3 rounded-xl hover:bg-surface-2 font-bold text-sm text-text"><Plus size={20} className="text-primary-soft" /> Save to Playlist</button>
-              <button onClick={() => { setPlayerTab('info'); setShowTopMenu(false); }} className="flex items-center gap-4 py-3 px-3 rounded-xl hover:bg-surface-2 font-bold text-sm text-text"><Info size={20} className="text-primary-soft" /> Song Details</button>
+              <div className="w-[112px] h-[112px] rounded-full overflow-hidden border-[8px] border-bg relative flex items-center justify-center">
+                {song.image && <img src={song.image} alt="" className="w-full h-full object-cover" />}
+                <div className="w-2 h-2 rounded-full bg-bg absolute" />
+              </div>
             </motion.div>
           </div>
         )}
-      </AnimatePresence>
 
-      {/* Save to Playlist Sheet */}
-      <AnimatePresence>
-        {showSaveSheet && (
-          <motion.div
-            className="absolute inset-0 z-50 flex flex-col justify-end"
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          >
-            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowSaveSheet(false)} />
-            <motion.div
-              className="bg-surface-2/90 backdrop-blur-xl border-t border-border/50 rounded-t-3xl pb-safe flex flex-col max-h-[70vh] relative z-10 shadow-[0_-10px_40px_rgba(0,0,0,0.3)]"
-              initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-              transition={springs.sheet}
+        {/* Style 4: Classic Minimal */}
+        {activeStyle === 'classic' && (
+          <div className="w-[320px] h-[320px] rounded-[20px] overflow-hidden bg-surface-2 shadow-2xl">
+            {song.image && <img src={song.image} alt={song.name} className="w-full h-full object-cover" />}
+          </div>
+        )}
+
+        {/* Style 5: Lyrics Stage */}
+        {activeStyle === 'lyrics' && (
+          <div className="w-full h-full flex flex-col justify-center overflow-y-auto px-4 text-center">
+            {lyricsData?.lines ? (
+              <div className="flex flex-col gap-4 py-8">
+                {lyricsData.lines.map((line: any, idx: number) => (
+                  <p key={idx} className="t-lyric text-[22px] font-bold text-text/70">
+                    {line.x || line.text}
+                  </p>
+                ))}
+              </div>
+            ) : (
+              <p className="t-body text-muted">Lyrics aren't available for this song</p>
+            )}
+          </div>
+        )}
+      </motion.div>
+
+      {/* LOWER PANELS (C, D, E, F) */}
+      <motion.div
+        drag="y"
+        dragConstraints={{ top: 0, bottom: 0 }}
+        dragElastic={0.2}
+        onDragEnd={handleControlsDragEnd}
+        className="relative z-10 flex flex-col gap-4 px-6 pb-[calc(var(--sab)+12px)]"
+      >
+        {/* ZONE C: INFO ROW */}
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <Marquee text={song.name} className="t-h1 text-[28px] font-extrabold text-text truncate" />
+              <EqBars isPlaying={isPlaying} />
+            </div>
+            <button
+              onClick={() => song.singers?.[0]?.id && navigate(`/artist/${song.singers[0].id}`)}
+              className="t-cap text-[15px] text-muted truncate hover:underline text-left block"
             >
-              <div className="p-5 flex flex-col h-full">
-                <div className="w-12 h-1.5 bg-border rounded-full opacity-50 mx-auto mb-4" />
-                <h3 className="text-text font-bold text-xl mb-4">Save to Playlist</h3>
-                <div className="flex-1 overflow-y-auto scroll-y pr-2">
-                  <button onClick={() => handleAddToPlaylist()} className="flex items-center gap-4 py-3 w-full border-b border-border mb-2">
-                    <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center flex-shrink-0">
-                      <Plus size={24} className="text-primary-soft" />
+              {song.artist}
+            </button>
+          </div>
+
+          <button
+            onClick={handleToggleLike}
+            className="w-11 h-11 rounded-full flex items-center justify-center text-text hover:text-heart"
+            aria-label="Like"
+          >
+            <Heart size={26} fill={liked ? '#FF4D6D' : 'none'} className={liked ? 'text-heart' : 'text-text'} />
+          </button>
+        </div>
+
+        {/* ZONE D: SEEK BAR */}
+        <div className="flex flex-col gap-1.5">
+          <div className="relative w-full h-[44px] flex items-center cursor-pointer">
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.001}
+              value={draggingSeek ? seekFraction : progress}
+              onPointerDown={() => setDraggingSeek(true)}
+              onChange={(e) => setSeekFraction(Number(e.target.value))}
+              onPointerUp={handleSeekCommit}
+              className="w-full h-[4px] bg-line rounded-full outline-none accent-primary appearance-none cursor-pointer"
+            />
+          </div>
+
+          <div className="flex items-center justify-between t-num text-[12px] text-muted font-medium -mt-3">
+            <span>{formatTime(positionMs)}</span>
+            <span>{formatTime(effectiveDuration)}</span>
+          </div>
+        </div>
+
+        {/* ZONE E: CONTROLS ROW */}
+        <div className="flex items-center justify-between px-2">
+          <button
+            onClick={() => setShuffle(!shuffle)}
+            className="w-11 h-11 flex items-center justify-center"
+            aria-label="Shuffle"
+          >
+            <Shuffle size={22} className={shuffle ? 'text-primary' : 'text-muted'} />
+          </button>
+
+          <button
+            onClick={previousTrack}
+            className="w-[56px] h-[56px] flex items-center justify-center text-text"
+            aria-label="Previous"
+          >
+            <SkipBack size={30} fill="currentColor" />
+          </button>
+
+          <button
+            onClick={togglePlay}
+            className="w-[76px] h-[76px] rounded-full bg-primary text-on-primary flex items-center justify-center shadow-2xl active:scale-95 transition-transform"
+            aria-label={isPlaying ? 'Pause' : 'Play'}
+          >
+            {isPlaying ? <Pause size={34} fill="currentColor" /> : <Play size={34} fill="currentColor" className="ml-1" />}
+          </button>
+
+          <button
+            onClick={nextTrack}
+            className="w-[56px] h-[56px] flex items-center justify-center text-text"
+            aria-label="Next"
+          >
+            <SkipForward size={30} fill="currentColor" />
+          </button>
+
+          <button
+            onClick={handleToggleRepeat}
+            className="w-11 h-11 flex items-center justify-center"
+            aria-label="Repeat"
+          >
+            {repeat === 'one' ? (
+              <Repeat1 size={22} className="text-primary" />
+            ) : (
+              <Repeat size={22} className={repeat === 'all' ? 'text-primary' : 'text-muted'} />
+            )}
+          </button>
+        </div>
+
+        {/* ZONE F: UTILITY ROW */}
+        <div className="flex items-center justify-between h-[48px]">
+          {/* Output Chip */}
+          <div className="h-[40px] px-3.5 rounded-full bg-surface-2 border border-line flex items-center gap-2 max-w-[140px]">
+            <Headphones size={18} className="text-muted flex-shrink-0" />
+            <span className="t-cap text-[13px] font-semibold text-text truncate">
+              Phone speaker
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setTimerSheetOpen(true)}
+              className={`w-11 h-11 rounded-full flex items-center justify-center ${
+                sleepTimerMinutes ? 'bg-primary text-on-primary' : 'text-muted'
+              }`}
+              aria-label="Timer"
+            >
+              <Timer size={22} />
+            </button>
+
+            <button
+              onClick={() => setSpeedSheetOpen(true)}
+              className={`w-11 h-11 rounded-full flex items-center justify-center ${
+                playbackSpeed !== 1 ? 'bg-primary text-on-primary' : 'text-muted'
+              }`}
+              aria-label="Speed"
+            >
+              <Gauge size={22} />
+            </button>
+
+            <button
+              onClick={() => setQueueOpen(true)}
+              className="w-[48px] h-[48px] rounded-[16px] bg-surface-2 border border-line flex items-center justify-center text-text relative"
+              aria-label="Queue"
+            >
+              <ListMusic size={22} />
+              <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-primary text-on-primary t-micro text-[11px] font-bold flex items-center justify-center">
+                {queue.length}
+              </span>
+            </button>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* OPTIONS SHEET (§8.9) */}
+      <Sheet
+        id="player-options-sheet"
+        isOpen={optionsOpen}
+        onClose={() => setOptionsOpen(false)}
+        title="Player options"
+      >
+        <div className="flex flex-col divide-y divide-line/20 py-2">
+          <button
+            onClick={() => {
+              setOptionsOpen(false);
+              setStylePickerOpen(true);
+            }}
+            className="h-[56px] px-3 flex items-center justify-between hover:bg-surface-2 rounded-[16px] text-left"
+          >
+            <div className="flex items-center gap-4">
+              <Palette size={22} className="text-text" />
+              <span className="t-h3 text-[15px] font-semibold text-text">Player style</span>
+            </div>
+            <span className="t-cap text-[13px] text-muted capitalize">{playerStyle}</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setOptionsOpen(false);
+              setSavePlaylistOpen(true);
+            }}
+            className="h-[56px] px-3 flex items-center gap-4 hover:bg-surface-2 rounded-[16px] text-left"
+          >
+            <FolderPlus size={22} className="text-text" />
+            <span className="t-h3 text-[15px] font-semibold text-text">Add to playlist</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setOptionsOpen(false);
+              addToast('Download started', 'info');
+            }}
+            className="h-[56px] px-3 flex items-center gap-4 hover:bg-surface-2 rounded-[16px] text-left"
+          >
+            <Download size={22} className="text-text" />
+            <span className="t-h3 text-[15px] font-semibold text-text">Download</span>
+          </button>
+
+          {song.albumId && (
+            <button
+              onClick={() => {
+                setOptionsOpen(false);
+                navigate(`/album/${song.albumId}`);
+              }}
+              className="h-[56px] px-3 flex items-center gap-4 hover:bg-surface-2 rounded-[16px] text-left"
+            >
+              <Disc3 size={22} className="text-text" />
+              <span className="t-h3 text-[15px] font-semibold text-text">Go to album</span>
+            </button>
+          )}
+
+          {song.singers?.[0]?.id && (
+            <button
+              onClick={() => {
+                setOptionsOpen(false);
+                if (song.singers?.[0]?.id) navigate(`/artist/${song.singers[0].id}`);
+              }}
+              className="h-[56px] px-3 flex items-center gap-4 hover:bg-surface-2 rounded-[16px] text-left"
+            >
+              <Mic2 size={22} className="text-text" />
+              <span className="t-h3 text-[15px] font-semibold text-text">Go to artist</span>
+            </button>
+          )}
+
+          <button
+            onClick={() => {
+              setOptionsOpen(false);
+              setInfoOpen(true);
+            }}
+            className="h-[56px] px-3 flex items-center gap-4 hover:bg-surface-2 rounded-[16px] text-left"
+          >
+            <Info size={22} className="text-text" />
+            <span className="t-h3 text-[15px] font-semibold text-text">Song info</span>
+          </button>
+        </div>
+      </Sheet>
+
+      {/* STYLE PICKER CAROUSEL SHEET (§8.9) */}
+      <Sheet
+        id="style-picker-sheet"
+        isOpen={stylePickerOpen}
+        onClose={() => setStylePickerOpen(false)}
+        title="Player style"
+        maxHeight="70vh"
+      >
+        <div className="flex flex-col gap-6 py-3">
+          <div className="flex gap-4 overflow-x-auto snap-x no-scrollbar px-2 py-2">
+            {STYLES_LIST.map((st) => {
+              const isSelected = playerStyle === st.id;
+              return (
+                <div
+                  key={st.id}
+                  onClick={() => setPlayerStyle(st.id)}
+                  className={`relative min-w-[168px] h-[260px] rounded-[24px] bg-surface-2 border-2 flex flex-col justify-between p-4 cursor-pointer snap-center shadow-lg transition-all ${
+                    isSelected ? 'border-primary ring-2 ring-primary/40' : 'border-line'
+                  }`}
+                >
+                  <div className="w-full h-[120px] rounded-[16px] bg-bg flex items-center justify-center overflow-hidden">
+                    {song.image ? (
+                      <img src={song.image} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <Disc3 size={32} className="text-muted" />
+                    )}
+                  </div>
+
+                  <div>
+                    <h3 className="t-h3 text-[16px] font-bold text-text">{st.name}</h3>
+                    <p className="t-cap text-[12px] text-muted leading-tight mt-0.5">{st.desc}</p>
+                  </div>
+
+                  {isSelected && (
+                    <div className="absolute top-3 right-3 w-6 h-6 rounded-full bg-primary flex items-center justify-center text-on-primary">
+                      <Check size={14} />
                     </div>
-                    <div className="text-left flex-1">
-                      <p className="text-text font-bold">New Playlist</p>
-                      <p className="text-muted text-xs">{suggestedName}</p>
-                    </div>
-                  </button>
-                  {userPlaylists.map((pl) => (
-                    <button key={pl.id || pl._id} onClick={() => handleAddToPlaylist(pl.id || pl._id)} className="flex items-center gap-4 py-3 w-full">
-                      <div className="w-12 h-12 rounded-xl bg-surface-2 flex items-center justify-center flex-shrink-0 overflow-hidden">
-                        {pl.coverImageUrl || pl.artwork ? <img src={pl.coverImageUrl || pl.artwork} alt={pl.name} className="w-full h-full object-cover" /> : <span className="text-muted text-xl">🎵</span>}
-                      </div>
-                      <div className="text-left flex-1">
-                        <p className="text-text font-bold">{pl.name}</p>
-                        <p className="text-muted text-xs">{pl.trackCount || 0} songs</p>
-                      </div>
-                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <Button size="lg" onClick={() => setStylePickerOpen(false)} className="w-full">
+            Use this style
+          </Button>
+        </div>
+      </Sheet>
+
+      {/* LYRICS PANEL OVERLAY */}
+      <AnimatePresence>
+        {lyricsOpen && (
+          <motion.div
+            initial={{ y: '100%' }}
+            animate={{ y: 0 }}
+            exit={{ y: '100%' }}
+            transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+            className="fixed inset-0 z-[60] bg-bg/92 backdrop-blur-xl flex flex-col p-6 max-w-[480px] mx-auto"
+          >
+            <div className="flex items-center justify-between pb-4 border-b border-line">
+              <h2 className="t-h2 text-[20px] font-bold text-text">Lyrics</h2>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setLyricsFontSize((s) => (s >= 28 ? 20 : s + 4))}
+                  className="w-10 h-10 rounded-full bg-surface-2 flex items-center justify-center text-text"
+                  aria-label="Font size"
+                >
+                  <Type size={18} />
+                </button>
+                <button
+                  onClick={() => setLyricsOpen(false)}
+                  className="w-10 h-10 rounded-full bg-surface-2 flex items-center justify-center text-text"
+                  aria-label="Close lyrics"
+                >
+                  <ChevronDown size={22} />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto py-6 text-center">
+              {lyricsData?.lines?.length > 0 ? (
+                <div className="flex flex-col gap-5 py-12">
+                  {lyricsData.lines.map((line: any, idx: number) => (
+                    <p
+                      key={idx}
+                      style={{ fontSize: `${lyricsFontSize}px` }}
+                      className="font-bold text-text/80 leading-relaxed"
+                    >
+                      {line.x || line.text}
+                    </p>
                   ))}
                 </div>
-              </div>
-            </motion.div>
+              ) : (
+                <div className="py-20 text-center">
+                  <p className="t-body text-muted">Lyrics aren't available for this song</p>
+                </div>
+              )}
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
-    </motion.div>
+
+      {/* SONG INFO SHEET (§8.8) */}
+      <Sheet
+        id="song-info-sheet"
+        isOpen={infoOpen}
+        onClose={() => setInfoOpen(false)}
+        title="Song info"
+        maxHeight="62vh"
+      >
+        <div className="flex flex-col gap-6 py-3">
+          <div className="flex items-center gap-4">
+            <div className="w-[64px] h-[64px] rounded-[16px] overflow-hidden bg-surface-2 flex-shrink-0">
+              {song.image && <img src={song.image} alt={song.name} className="w-full h-full object-cover" />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <h2 className="t-h2 text-[18px] font-bold text-text truncate">{song.name}</h2>
+              <p className="t-cap text-[13px] text-muted truncate">{song.artist}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 bg-surface-2 p-4 rounded-[20px] border border-line">
+            <div>
+              <span className="t-cap text-[12px] text-muted block">Language</span>
+              <span className="t-body text-[15px] font-semibold text-text capitalize">
+                {song.language || 'Hindi'}
+              </span>
+            </div>
+            <div>
+              <span className="t-cap text-[12px] text-muted block">Duration</span>
+              <span className="t-body text-[15px] font-semibold text-text">
+                {formatTime(effectiveDuration)}
+              </span>
+            </div>
+            <div>
+              <span className="t-cap text-[12px] text-muted block">Quality</span>
+              <span className="t-body text-[15px] font-semibold text-text">320 kbps</span>
+            </div>
+            <div>
+              <span className="t-cap text-[12px] text-muted block">Album</span>
+              <span className="t-body text-[15px] font-semibold text-text truncate block">
+                {song.album || 'Single'}
+              </span>
+            </div>
+          </div>
+        </div>
+      </Sheet>
+
+      {/* SLEEP TIMER SHEET */}
+      <Sheet
+        id="sleep-timer-sheet"
+        isOpen={timerSheetOpen}
+        onClose={() => setTimerSheetOpen(false)}
+        title="Sleep timer"
+      >
+        <div className="flex flex-col divide-y divide-line/20 py-2">
+          {[5, 10, 15, 30, 45, 60].map((mins) => (
+            <button
+              key={mins}
+              onClick={() => {
+                setSleepTimerMinutes(mins);
+                addToast(`Sleep timer set for ${mins} min`, 'info');
+                setTimerSheetOpen(false);
+              }}
+              className="h-[56px] px-3 flex items-center justify-between hover:bg-surface-2 rounded-[16px] text-left"
+            >
+              <span className="t-h3 text-[15px] font-semibold text-text">{mins} minutes</span>
+              {sleepTimerMinutes === mins && <Check size={18} className="text-primary" />}
+            </button>
+          ))}
+          {sleepTimerMinutes && (
+            <button
+              onClick={() => {
+                setSleepTimerMinutes(null);
+                addToast('Sleep timer canceled', 'info');
+                setTimerSheetOpen(false);
+              }}
+              className="h-[56px] px-3 flex items-center text-danger font-semibold t-h3 hover:bg-surface-2 rounded-[16px]"
+            >
+              Turn off timer
+            </button>
+          )}
+        </div>
+      </Sheet>
+
+      {/* SPEED SHEET */}
+      <Sheet
+        id="speed-sheet"
+        isOpen={speedSheetOpen}
+        onClose={() => setSpeedSheetOpen(false)}
+        title="Playback speed"
+      >
+        <div className="flex flex-col gap-6 py-3">
+          <div className="flex items-center justify-center gap-2 overflow-x-auto no-scrollbar">
+            {[0.75, 1, 1.25, 1.5, 1.75, 2].map((sp) => (
+              <Chip
+                key={sp}
+                label={`${sp}x`}
+                selected={playbackSpeed === sp}
+                onClick={() => setPlaybackSpeed(sp)}
+              />
+            ))}
+          </div>
+
+          <Button size="lg" onClick={() => setSpeedSheetOpen(false)} className="w-full">
+            Done
+          </Button>
+        </div>
+      </Sheet>
+
+      {/* QUEUE & SAVE TO PLAYLIST SHEETS */}
+      <QueueSheet isOpen={queueOpen} onClose={() => setQueueOpen(false)} />
+      <SaveToPlaylistSheet
+        song={song}
+        isOpen={savePlaylistOpen}
+        onClose={() => setSavePlaylistOpen(false)}
+      />
+    </div>
   );
 }
