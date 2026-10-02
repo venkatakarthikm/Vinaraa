@@ -1,201 +1,341 @@
-import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { users } from '@/api/endpoints';
-import { pageTransitionVariants, listStaggerVariants } from '@/motion';
-import { ChevronLeft, Volume2, Bell, Wifi, Info, Check } from 'lucide-react';
-
-const QUALITY_OPTIONS = [
-  { label: 'Low',    sub: '96 kbps',  value: 'low'    },
-  { label: 'Normal', sub: '160 kbps', value: 'medium' },
-  { label: 'High',   sub: '320 kbps', value: 'high'   },
-];
-
-function Toggle({ on, onToggle, label }: { on: boolean; onToggle: () => void; label: string }) {
-  return (
-    <button
-      role="switch"
-      aria-checked={on}
-      aria-label={`Toggle ${label}`}
-      onClick={onToggle}
-      className="relative w-12 h-6 rounded-pill transition-colors flex-shrink-0"
-      style={{ background: on ? 'var(--color-primary)' : 'rgba(40,36,77,0.8)', transition: 'background 0.2s ease' }}
-    >
-      <motion.div
-        className="absolute top-1 w-4 h-4 rounded-full"
-        style={{ background: 'white', boxShadow: '0 1px 4px rgba(0,0,0,0.3)' }}
-        animate={{ x: on ? 28 : 4 }}
-        transition={{ type: 'spring', stiffness: 500, damping: 38 }}
-      />
-    </button>
-  );
-}
-
-function SettingsGroup({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--color-surface-2)', border: '1px solid rgba(40,36,77,0.5)' }}>
-      <div className="flex items-center gap-3 px-4 py-3.5" style={{ borderBottom: '1px solid rgba(40,36,77,0.4)' }}>
-        <span style={{ color: 'var(--color-primary-soft)' }}>{icon}</span>
-        <h2 className="font-bold text-sm" style={{ color: 'var(--color-text)' }}>{title}</h2>
-      </div>
-      <div className="px-4 py-3 flex flex-col gap-4">{children}</div>
-    </div>
-  );
-}
+import Page from '@/components/Page';
+import { usePrefsStore } from '@/store/prefs';
+import type { ThemeMode } from '@/store/prefs';
+import { useUIStore } from '@/store/ui';
+import { useAuthStore } from '@/store/auth';
+import { users, auth as authApi } from '@/api/endpoints';
+import ThemeSheet from '@/components/ThemeSheet';
+import { Sheet } from '@/components/SheetHost';
+import Input from '@/components/Input';
+import Button from '@/components/Button';
+import { ChevronRight, SunMoon, Palette, Check } from 'lucide-react';
 
 export default function Settings() {
-  const [quality, setQuality] = useState('high');
-  const [autoplay, setAutoplay] = useState(true);
-  const [crossfade, setCrossfade] = useState(false);
-  const [dataSaver, setDataSaver] = useState(false);
-  const [saved, setSaved] = useState(false);
   const navigate = useNavigate();
+  const addToast = useUIStore((s) => s.addToast);
+  const logout = useAuthStore((s) => s.logout);
 
-  const savePrefs = async (patch?: object) => {
+  const {
+    theme,
+    mode, setMode,
+    playerStyle,
+    ambientGlow,
+    reduceEffects, setReduceEffects,
+  } = usePrefsStore();
+
+  const [themeSheetOpen, setThemeSheetOpen] = useState(false);
+  const [preferences, setPreferences] = useState<any>({});
+
+  // Sheets
+  const [qualitySheetOpen, setQualitySheetOpen] = useState(false);
+  const [changePassOpen, setChangePassOpen] = useState(false);
+  const [devModeClicks, setDevModeClicks] = useState(0);
+
+  // Password fields
+  const [currentPass, setCurrentPass] = useState('');
+  const [newPass, setNewPass] = useState('');
+  const [confirmPass, setConfirmPass] = useState('');
+
+  useEffect(() => {
+    users.me()
+      .then((res) => {
+        if (res?.data?.user?.preferences) {
+          setPreferences(res.data.user.preferences);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const updatePref = async (key: string, value: any) => {
+    const prev = { ...preferences };
+    const next = { ...preferences, [key]: value };
+    setPreferences(next);
+
     try {
-      await users.updatePreferences({
-        audioQuality: quality,
-        autoplay,
-        crossfadeSeconds: crossfade ? 3 : 0,
-        dataSaver,
-        ...patch,
-      });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 1800);
-    } catch {}
+      await users.updatePreferences({ [key]: value });
+    } catch (_e) {
+      setPreferences(prev);
+      addToast('Failed to update settings', 'error');
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (newPass.length < 8) {
+      addToast('Password must be at least 8 characters', 'error');
+      return;
+    }
+    if (newPass !== confirmPass) {
+      addToast('Passwords do not match', 'error');
+      return;
+    }
+
+    try {
+      await authApi.changePassword({ currentPassword: currentPass, newPassword: newPass });
+      addToast('Password updated', 'success');
+      setChangePassOpen(false);
+      setCurrentPass('');
+      setNewPass('');
+      setConfirmPass('');
+    } catch (_e) {
+      addToast('Failed to change password', 'error');
+    }
+  };
+
+  const handleVersionClick = () => {
+    const next = devModeClicks + 1;
+    setDevModeClicks(next);
+    if (next === 7) {
+      addToast('Developer mode enabled', 'info');
+    }
   };
 
   return (
-    <motion.div
-      className="flex flex-col h-full"
-      style={{ background: 'var(--color-bg)' }}
-      initial="initial"
-      animate="animate"
-      exit="exit"
-      variants={pageTransitionVariants}
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between px-4" style={{ paddingTop: `calc(env(safe-area-inset-top) + 16px)`, paddingBottom: 12 }}>
-        <div className="flex items-center gap-3">
-          <motion.button
-            whileTap={{ scale: 0.9 }}
-            onClick={() => navigate(-1)}
-            className="w-9 h-9 rounded-full flex items-center justify-center"
-            style={{ background: 'rgba(255,255,255,0.08)' }}
-            aria-label="Back"
-          >
-            <ChevronLeft size={20} style={{ color: 'var(--color-text)' }} />
-          </motion.button>
-          <h1 className="text-xl font-black" style={{ color: 'var(--color-text)' }}>Settings</h1>
-        </div>
-        {saved && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0 }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-pill"
-            style={{ background: 'rgba(45,225,181,0.15)', color: 'var(--color-mint)' }}
-          >
-            <Check size={13} />
-            <span className="text-xs font-bold">Saved</span>
-          </motion.div>
-        )}
-      </div>
+    <Page title="Settings">
+      <div className="flex flex-col gap-6 px-5 pt-4 pb-[120px]">
+        {/* GROUP 1: APPEARANCE */}
+        <section className="flex flex-col gap-2">
+          <span className="t-micro text-[11px] font-bold text-muted uppercase tracking-wider px-1">
+            Appearance
+          </span>
+          <div className="bg-surface rounded-[24px] border border-line flex flex-col divide-y divide-line/20 overflow-hidden">
+            <button
+              onClick={() => setThemeSheetOpen(true)}
+              className="h-[56px] px-4 flex items-center justify-between hover:bg-surface-2 transition-colors text-left"
+            >
+              <div className="flex items-center gap-3">
+                <Palette size={20} className="text-text" />
+                <span className="t-h3 text-[15px] font-semibold text-text">Theme</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="t-cap text-[13px] text-muted capitalize">{theme}</span>
+                <ChevronRight size={18} className="text-muted" />
+              </div>
+            </button>
 
-      <div className="flex-1 overflow-y-auto scroll-y px-5 pb-10 flex flex-col gap-4">
-        {/* Audio Quality */}
-        <motion.div custom={0} variants={listStaggerVariants} initial="initial" animate="animate">
-          <SettingsGroup title="Audio Quality" icon={<Volume2 size={18} />}>
-            <div className="flex flex-col gap-2">
-              {QUALITY_OPTIONS.map((opt) => {
-                const isActive = quality === opt.value;
-                return (
-                  <motion.button
-                    key={opt.value}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => { setQuality(opt.value); savePrefs({ audioQuality: opt.value }); }}
-                    className="flex items-center justify-between px-4 py-3 rounded-xl transition-all"
-                    style={{
-                      background: isActive ? 'rgba(139,61,255,0.15)' : 'rgba(9,7,20,0.5)',
-                      border: `1px solid ${isActive ? 'rgba(139,61,255,0.4)' : 'rgba(40,36,77,0.5)'}`,
-                    }}
+            <div className="h-[56px] px-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <SunMoon size={20} className="text-text" />
+                <span className="t-h3 text-[15px] font-semibold text-text">Mode</span>
+              </div>
+              <div className="h-[36px] bg-surface-2 p-1 rounded-full flex items-center">
+                {['system', 'light', 'dark'].map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setMode(m as ThemeMode)}
+                    className={`px-3 h-full rounded-full t-micro text-[11px] font-bold capitalize transition-all ${
+                      mode === m ? 'bg-primary text-on-primary' : 'text-muted'
+                    }`}
                   >
-                    <div>
-                      <p className="text-sm font-semibold" style={{ color: isActive ? 'var(--color-primary-soft)' : 'var(--color-text)' }}>{opt.label}</p>
-                      <p className="text-xs" style={{ color: 'var(--color-muted)' }}>{opt.sub}</p>
-                    </div>
-                    {isActive && (
-                      <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ background: 'var(--color-primary)' }}>
-                        <Check size={12} color="white" />
-                      </div>
-                    )}
-                  </motion.button>
-                );
-              })}
-            </div>
-          </SettingsGroup>
-        </motion.div>
-
-        {/* Playback */}
-        <motion.div custom={1} variants={listStaggerVariants} initial="initial" animate="animate">
-          <SettingsGroup title="Playback" icon={<Volume2 size={18} />}>
-            {[
-              { label: 'Autoplay',   sub: 'Continue playing after queue ends', state: autoplay,   onToggle: () => { setAutoplay((v) => !v); savePrefs({ autoplay: !autoplay }); } },
-              { label: 'Crossfade',  sub: '3-second fade between songs',       state: crossfade,  onToggle: () => { setCrossfade((v) => !v); savePrefs({ crossfadeSeconds: crossfade ? 0 : 3 }); } },
-              { label: 'Data Saver', sub: 'Lower quality on mobile data',       state: dataSaver,  onToggle: () => { setDataSaver((v) => !v); savePrefs({ dataSaver: !dataSaver }); } },
-            ].map(({ label, sub, state, onToggle }) => (
-              <div key={label} className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>{label}</p>
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted)' }}>{sub}</p>
-                </div>
-                <Toggle on={state} onToggle={onToggle} label={label} />
+                    {m}
+                  </button>
+                ))}
               </div>
-            ))}
-          </SettingsGroup>
-        </motion.div>
+            </div>
 
-        {/* Notifications */}
-        <motion.div custom={2} variants={listStaggerVariants} initial="initial" animate="animate">
-          <SettingsGroup title="Notifications" icon={<Bell size={18} />}>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>Push Notifications</p>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted)' }}>Required for background playback controls</p>
+            <div className="h-[56px] px-4 flex items-center justify-between">
+              <span className="t-h3 text-[15px] font-semibold text-text">Player style</span>
+              <span className="t-cap text-[13px] text-muted capitalize">{playerStyle}</span>
+            </div>
+
+            <div className="h-[56px] px-4 flex items-center justify-between">
+              <span className="t-h3 text-[15px] font-semibold text-text">Ambient glow</span>
+              <span className="t-cap text-[13px] text-muted capitalize">{ambientGlow}</span>
+            </div>
+
+            <div className="h-[56px] px-4 flex items-center justify-between">
+              <span className="t-h3 text-[15px] font-semibold text-text">Reduce effects</span>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={reduceEffects}
+                  onChange={(e) => setReduceEffects(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-[52px] h-[32px] bg-line peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-[24px] after:w-[24px] after:transition-all peer-checked:bg-primary" />
+              </label>
+            </div>
+          </div>
+        </section>
+
+        {/* GROUP 2: PLAYBACK */}
+        <section className="flex flex-col gap-2">
+          <span className="t-micro text-[11px] font-bold text-muted uppercase tracking-wider px-1">
+            Playback
+          </span>
+          <div className="bg-surface rounded-[24px] border border-line flex flex-col divide-y divide-line/20 overflow-hidden">
+            <button
+              onClick={() => setQualitySheetOpen(true)}
+              className="h-[56px] px-4 flex items-center justify-between hover:bg-surface-2 transition-colors text-left"
+            >
+              <span className="t-h3 text-[15px] font-semibold text-text">Audio quality</span>
+              <div className="flex items-center gap-2">
+                <span className="t-cap text-[13px] text-muted capitalize">
+                  {preferences?.audioQuality || 'High (160 kbps)'}
+                </span>
+                <ChevronRight size={18} className="text-muted" />
               </div>
-              <motion.button
-                whileTap={{ scale: 0.95 }}
-                onClick={() => {
-                  if ((window as any).plugins?.OneSignal) {
-                    (window as any).plugins.OneSignal.Notifications.requestPermission(true);
-                  }
-                }}
-                className="px-4 py-2 rounded-xl text-xs font-bold"
-                style={{ background: 'rgba(139,61,255,0.15)', color: 'var(--color-primary-soft)', border: '1px solid rgba(139,61,255,0.3)' }}
-              >
-                Enable
-              </motion.button>
-            </div>
-          </SettingsGroup>
-        </motion.div>
+            </button>
 
-        {/* Data Sync */}
-        <motion.div custom={3} variants={listStaggerVariants} initial="initial" animate="animate">
-          <SettingsGroup title="Wi-Fi Sync" icon={<Wifi size={18} />}>
-            <p className="text-sm" style={{ color: 'var(--color-muted)' }}>Downloads only happen on Wi-Fi by default to save your mobile data.</p>
-          </SettingsGroup>
-        </motion.div>
-
-        {/* About */}
-        <motion.div custom={4} variants={listStaggerVariants} initial="initial" animate="animate">
-          <SettingsGroup title="About" icon={<Info size={18} />}>
-            <div>
-              <p className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>Vinaraa</p>
-              <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted)' }}>Version 1.0.0 — Premium music for a private few.</p>
+            <div className="h-[56px] px-4 flex items-center justify-between">
+              <span className="t-h3 text-[15px] font-semibold text-text">Data saver</span>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={Boolean(preferences?.dataSaver)}
+                  onChange={(e) => updatePref('dataSaver', e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-[52px] h-[32px] bg-line peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-[24px] after:w-[24px] after:transition-all peer-checked:bg-primary" />
+              </label>
             </div>
-          </SettingsGroup>
-        </motion.div>
+
+            <div className="h-[56px] px-4 flex items-center justify-between">
+              <span className="t-h3 text-[15px] font-semibold text-text">
+                Autoplay similar songs
+              </span>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={preferences?.autoplay !== false}
+                  onChange={(e) => updatePref('autoplay', e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-[52px] h-[32px] bg-line peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-[24px] after:w-[24px] after:transition-all peer-checked:bg-primary" />
+              </label>
+            </div>
+
+            <div className="h-[56px] px-4 flex items-center justify-between">
+              <span className="t-h3 text-[15px] font-semibold text-text">Explicit songs</span>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={preferences?.explicitContent !== false}
+                  onChange={(e) => updatePref('explicitContent', e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-[52px] h-[32px] bg-line peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-[24px] after:w-[24px] after:transition-all peer-checked:bg-primary" />
+              </label>
+            </div>
+          </div>
+        </section>
+
+        {/* GROUP 3: ACCOUNT & SECURITY */}
+        <section className="flex flex-col gap-2">
+          <span className="t-micro text-[11px] font-bold text-muted uppercase tracking-wider px-1">
+            Account & Security
+          </span>
+          <div className="bg-surface rounded-[24px] border border-line flex flex-col divide-y divide-line/20 overflow-hidden">
+            <button
+              onClick={() => setChangePassOpen(true)}
+              className="h-[56px] px-4 flex items-center justify-between hover:bg-surface-2 transition-colors text-left"
+            >
+              <span className="t-h3 text-[15px] font-semibold text-text">Change password</span>
+              <ChevronRight size={18} className="text-muted" />
+            </button>
+
+            <button
+              onClick={async () => {
+                await logout();
+                navigate('/login', { replace: true });
+              }}
+              className="h-[56px] px-4 flex items-center justify-between hover:bg-surface-2 transition-colors text-left text-text"
+            >
+              <span className="t-h3 text-[15px] font-semibold">Log out</span>
+            </button>
+          </div>
+        </section>
+
+        {/* GROUP 4: ABOUT */}
+        <section className="flex flex-col gap-2">
+          <span className="t-micro text-[11px] font-bold text-muted uppercase tracking-wider px-1">
+            About
+          </span>
+          <div className="bg-surface rounded-[24px] border border-line flex flex-col divide-y divide-line/20 overflow-hidden">
+            <div
+              onClick={handleVersionClick}
+              className="h-[56px] px-4 flex items-center justify-between cursor-pointer"
+            >
+              <span className="t-h3 text-[15px] font-semibold text-text">Version</span>
+              <span className="t-cap text-[13px] text-muted">1.0.0</span>
+            </div>
+
+            {devModeClicks >= 7 && (
+              <div className="h-[56px] px-4 flex items-center justify-between bg-primary/10">
+                <span className="t-h3 text-[15px] font-semibold text-primary">API Endpoint</span>
+                <span className="t-cap text-[12px] text-primary truncate max-w-[200px]">
+                  {import.meta.env.VITE_API_BASE_URL || 'https://vinaraa.onrender.com/api/v1'}
+                </span>
+              </div>
+            )}
+          </div>
+        </section>
       </div>
-    </motion.div>
+
+      {/* Theme Sheet */}
+      <ThemeSheet isOpen={themeSheetOpen} onClose={() => setThemeSheetOpen(false)} />
+
+      {/* Audio Quality Sheet */}
+      <Sheet
+        id="audio-quality-sheet"
+        isOpen={qualitySheetOpen}
+        onClose={() => setQualitySheetOpen(false)}
+        title="Audio quality"
+      >
+        <div className="flex flex-col divide-y divide-line/20 py-2">
+          {[
+            { id: 'low', label: 'Low (48 kbps · Data saver)' },
+            { id: 'medium', label: 'Medium (96 kbps)' },
+            { id: 'high', label: 'High (160 kbps)' },
+            { id: 'veryhigh', label: 'Very High (320 kbps · Best)' },
+          ].map((q) => (
+            <button
+              key={q.id}
+              onClick={() => {
+                updatePref('audioQuality', q.id);
+                setQualitySheetOpen(false);
+              }}
+              className="h-[56px] px-3 flex items-center justify-between hover:bg-surface-2 rounded-[16px] text-left"
+            >
+              <span className="t-h3 text-[15px] font-semibold text-text">{q.label}</span>
+              {preferences?.audioQuality === q.id && <Check size={18} className="text-primary" />}
+            </button>
+          ))}
+        </div>
+      </Sheet>
+
+      {/* Change Password Sheet */}
+      <Sheet
+        id="change-password-sheet"
+        isOpen={changePassOpen}
+        onClose={() => setChangePassOpen(false)}
+        title="Change password"
+      >
+        <div className="flex flex-col gap-4 py-2">
+          <Input
+            label="Current password"
+            isPassword
+            value={currentPass}
+            onChange={(e) => setCurrentPass(e.target.value)}
+          />
+          <Input
+            label="New password"
+            isPassword
+            value={newPass}
+            onChange={(e) => setNewPass(e.target.value)}
+          />
+          <Input
+            label="Confirm new password"
+            isPassword
+            value={confirmPass}
+            onChange={(e) => setConfirmPass(e.target.value)}
+          />
+          <Button size="lg" onClick={handleChangePassword} className="w-full mt-2">
+            Change password
+          </Button>
+        </div>
+      </Sheet>
+    </Page>
   );
 }

@@ -1,44 +1,68 @@
-import { motion } from 'framer-motion';
-import { pageTransitionVariants } from '@/motion';
-import { WifiOff, Download } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { WifiOff, Download } from 'lucide-react';
+import Button from '@/components/Button';
+import { useUIStore } from '@/store/ui';
 
 export default function Offline() {
   const navigate = useNavigate();
+  const addToast = useUIStore((s) => s.addToast);
+  const [checking, setChecking] = useState(false);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      addToast('Back online', 'success');
+      navigate(-1);
+    };
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [navigate, addToast]);
+
+  const handleTryAgain = () => {
+    setChecking(true);
+    setTimeout(() => {
+      setChecking(false);
+      if (navigator.onLine) {
+        addToast('Back online', 'success');
+        navigate(-1);
+      } else {
+        addToast('Still offline', 'info');
+      }
+    }, 1000);
+  };
 
   return (
-    <motion.div
-      className="flex flex-col items-center justify-center h-full px-6 text-center"
-      style={{ background: 'var(--color-bg)' }}
-      initial="initial"
-      animate="animate"
-      exit="exit"
-      variants={pageTransitionVariants}
-    >
-      {/* Animated wifi icon */}
-      <motion.div
-        animate={{ scale: [1, 1.05, 1] }}
-        transition={{ repeat: Infinity, duration: 2.5, ease: 'easeInOut' }}
-        className="w-24 h-24 rounded-3xl flex items-center justify-center mb-6"
-        style={{ background: 'rgba(154,152,189,0.1)', border: '1px solid rgba(154,152,189,0.15)' }}
-      >
-        <WifiOff size={40} style={{ color: 'var(--color-muted)' }} />
-      </motion.div>
+    <div className="relative w-full h-full bg-bg flex flex-col items-center justify-center p-6 text-center select-none">
+      {/* 72 Circle + WifiOff */}
+      <div className="w-[72px] h-[72px] rounded-full bg-surface-2 flex items-center justify-center text-muted mb-4 shadow-sm">
+        <WifiOff size={32} />
+      </div>
 
-      <h1 className="text-2xl font-black mb-2" style={{ color: 'var(--color-text)' }}>You're offline</h1>
-      <p className="text-sm mb-8 max-w-xs leading-relaxed" style={{ color: 'var(--color-muted)' }}>
-        Connect to the internet to stream new songs, or play your downloaded music offline.
+      <h1 className="t-h1 text-[28px] font-bold text-text mb-2">You're offline</h1>
+      <p className="t-body text-[15px] text-muted max-w-[280px] leading-relaxed mb-8">
+        Your downloads are still here. Everything else needs internet.
       </p>
 
-      <motion.button
-        whileTap={{ scale: 0.95 }}
-        onClick={() => navigate('/library', { replace: true, state: { tab: 'downloads' } })}
-        className="flex items-center gap-2 px-6 py-3.5 rounded-2xl text-white font-bold text-sm"
-        style={{ background: 'var(--color-primary)', boxShadow: '0 8px 24px rgba(139,61,255,0.3)' }}
-      >
-        <Download size={16} />
-        Open Downloads
-      </motion.button>
-    </motion.div>
+      <div className="flex flex-col gap-3 w-full max-w-[280px]">
+        <Button
+          size="lg"
+          onClick={() => navigate('/library', { state: { tab: 'downloads' } })}
+          className="w-full flex items-center justify-center gap-2"
+        >
+          <Download size={18} />
+          <span>Open downloads</span>
+        </Button>
+
+        <Button
+          variant="secondary"
+          size="lg"
+          loading={checking}
+          onClick={handleTryAgain}
+          className="w-full"
+        >
+          Try again
+        </Button>
+      </div>
+    </div>
   );
 }
