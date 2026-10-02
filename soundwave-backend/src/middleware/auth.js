@@ -17,7 +17,6 @@ function verifyAccessToken(token) {
   try {
     return jwt.verify(token, env.JWT_ACCESS_SECRET, { algorithms: ['HS256'], issuer: 'soundwave' });
   } catch (err) {
-    if (err.name === 'TokenExpiredError') throw AppError.unauthorized('Access token expired', 'TOKEN_EXPIRED');
     throw AppError.unauthorized('Invalid access token', 'TOKEN_INVALID');
   }
 }
@@ -44,7 +43,7 @@ async function authenticate(req, _res, next) {
 }
 
 /** Soft auth: attaches the user when a valid token is present, never fails. */
-async function optionalAuth(req, _res, next) {
+async function optionalAuth(req, res, next) {
   const token = extractToken(req);
   if (!token) return next();
   try {
@@ -55,7 +54,7 @@ async function optionalAuth(req, _res, next) {
       req.auth = payload;
     }
   } catch {
-    /* ignore — treated as anonymous */
+    res.set('X-Auth-State', 'invalid');
   }
   return next();
 }

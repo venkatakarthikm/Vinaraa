@@ -3,7 +3,6 @@ import { WebPlugin } from '@capacitor/core';
 import type { VinaraaPlayerPlugin } from './player';
 
 const ACCESS_TOKEN_KEY = 'vinaraa_access_token';
-const REFRESH_TOKEN_KEY = 'vinaraa_refresh_token';
 
 export class VinaraaPlayerWebStub extends WebPlugin implements VinaraaPlayerPlugin {
   private audio: HTMLAudioElement | null = null;
@@ -17,16 +16,17 @@ export class VinaraaPlayerWebStub extends WebPlugin implements VinaraaPlayerPlug
     return { isOnline: navigator.onLine };
   }
 
-  async setAuth({ accessToken, refreshToken }: { accessToken: string; refreshToken: string }): Promise<void> {
+  async setAuth({ accessToken }: { accessToken: string }): Promise<void> {
     if (accessToken) localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
     else localStorage.removeItem(ACCESS_TOKEN_KEY);
-    if (refreshToken) localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
-    else localStorage.removeItem(REFRESH_TOKEN_KEY);
   }
 
-  async getAccessToken(): Promise<{ token: string | null; refreshToken?: string | null }> {
-    return { token: localStorage.getItem(ACCESS_TOKEN_KEY), refreshToken: localStorage.getItem(REFRESH_TOKEN_KEY) };
+  async getAccessToken(): Promise<{ token: string | null }> {
+    return { token: localStorage.getItem(ACCESS_TOKEN_KEY) };
   }
+
+  async setConfig(_options: { apiBase: string; deviceId: string }): Promise<void> {}
+  async setPlaybackContext(_options: { source?: string; contextId?: string }): Promise<void> {}
 
   async play({ songId, streamUrl, title: _title, artist: _artist }: { songId: string; streamUrl: string; title: string; artist: string; artwork?: string }): Promise<void> {
     this.currentSongId = songId;
@@ -67,6 +67,16 @@ export class VinaraaPlayerWebStub extends WebPlugin implements VinaraaPlayerPlug
       }
     }
   }
+
+  async insertNext(_options: { item: any }): Promise<void> {}
+  async appendItems(_options: { items: any[] }): Promise<void> {}
+  async removeAt(_options: { index: number }): Promise<void> {}
+  async moveItem(_options: { from: number; to: number }): Promise<void> {}
+  async skipToIndex(_options: { index: number }): Promise<void> {}
+  async setShuffle(_options: { shuffle: boolean }): Promise<void> {}
+  async getQueue(): Promise<{ currentIndex: number; items: string[] }> { return { currentIndex: 0, items: [] }; }
+  async clear(): Promise<void> {}
+  async appReady(): Promise<void> {}
 
   async pause(): Promise<void> {
     this.audio?.pause();

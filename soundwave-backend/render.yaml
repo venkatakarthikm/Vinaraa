@@ -14,9 +14,7 @@ services:
       - key: MONGODB_URI
         sync: false
       - key: JWT_ACCESS_SECRET
-        generateValue: true
-      - key: JWT_REFRESH_SECRET
-        generateValue: true
+        sync: false # Set this in Render dashboard once, changing it invalidates all tokens
       - key: ADMIN_API_KEY
         generateValue: true
       - key: UPSTREAM_URLS

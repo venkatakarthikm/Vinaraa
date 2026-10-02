@@ -5,7 +5,7 @@ const logger = require('../utils/logger');
 const { AppError } = require('../utils/errors');
 const { randomToken, sha256 } = require('../utils/crypto');
 const User = require('../models/User');
-const RefreshToken = require('../models/RefreshToken');
+
 const tokenService = require('./tokenService');
 const playlistService = require('./playlistService');
 
@@ -63,11 +63,7 @@ async function register({ email, password, name, handle, locale, country, timezo
   // Every account starts with its system playlists so the library is never empty.
   await playlistService.ensureSystemPlaylists(user).catch((err) => logger.warn('system playlist bootstrap failed', { err: err.message }));
 
-  const tokens = await tokenService.issueTokenPair(user, {
-    deviceId: device?.deviceId,
-    ip: undefined,
-    userAgent: undefined,
-  });
+  const tokens = tokenService.issueToken(user);
   logger.info('user registered', { userId: String(user._id) });
   return { user: publicUser(user), tokens };
 }
@@ -105,7 +101,7 @@ async function login({ email, password, device, ip, userAgent }) {
 
   await playlistService.ensureSystemPlaylists(user).catch(() => {});
 
-  const tokens = await tokenService.issueTokenPair(user, { deviceId: device?.deviceId, ip, userAgent });
+  const tokens = tokenService.issueToken(user);
   return { user: publicUser(user), tokens };
 }
 
@@ -119,7 +115,6 @@ async function changePassword(userId, { currentPassword, newPassword }) {
   await user.setPassword(newPassword);
   user.security.tokenVersion = (user.security.tokenVersion || 0) + 1; // kill every existing access token
   await user.save();
-  await tokenService.revokeAllForUser(user._id, 'password_changed');
   return { ok: true };
 }
 
@@ -147,21 +142,13 @@ async function resetPassword({ email, token, newPassword }) {
   user.security.resetTokenExpiresAt = undefined;
   user.security.tokenVersion = (user.security.tokenVersion || 0) + 1;
   await user.save();
-  await tokenService.revokeAllForUser(user._id, 'password_reset');
   return { ok: true };
 }
 
 async function sessions(userId) {
-  const [tokens, user] = await Promise.all([tokenService.listActiveSessions(userId), User.findById(userId).lean()]);
+  const user = await User.findById(userId).lean();
   return {
-    activeSessions: tokens.map((t) => ({
-      id: t._id,
-      deviceId: t.deviceId,
-      ip: t.ip,
-      userAgent: t.userAgent,
-      createdAt: t.createdAt,
-      expiresAt: t.expiresAt,
-    })),
+    activeSessions: [],
     devices: (user?.devices || []).map((d) => ({
       deviceId: d.deviceId,
       platform: d.platform,

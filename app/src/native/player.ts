@@ -7,9 +7,13 @@ export interface VinaraaPlayerPlugin {
   /** Check if active internet connection is available */
   isOnline(): Promise<{ isOnline: boolean }>;
   /** Set auth tokens (called after login/refresh) */
-  setAuth(options: { accessToken: string; refreshToken: string }): Promise<void>;
+  setAuth(options: { accessToken: string }): Promise<void>;
   /** Get current access token */
-  getAccessToken(): Promise<{ token: string | null; refreshToken?: string | null }>;
+  getAccessToken(): Promise<{ token: string | null }>;
+  /** Set tracking configuration */
+  setConfig(options: { apiBase: string; deviceId: string }): Promise<void>;
+  /** Set playback context (source/contextId) for tracking */
+  setPlaybackContext(options: { source?: string; contextId?: string }): Promise<void>;
   /** Start playing a stream URL */
   play(options: { songId: string; streamUrl: string; title: string; artist: string; artwork?: string }): Promise<void>;
   /** Set full queue natively in ExoPlayer */
@@ -20,6 +24,15 @@ export interface VinaraaPlayerPlugin {
     positionMs?: number;
     play?: boolean;
   }): Promise<void>;
+  insertNext(options: { item: any }): Promise<void>;
+  appendItems(options: { items: any[] }): Promise<void>;
+  removeAt(options: { index: number }): Promise<void>;
+  moveItem(options: { from: number; to: number }): Promise<void>;
+  skipToIndex(options: { index: number }): Promise<void>;
+  setShuffle(options: { shuffle: boolean }): Promise<void>;
+  getQueue(): Promise<{ currentIndex: number; items: string[] }>;
+  clear(): Promise<void>;
+  appReady(): Promise<void>;
   /** Pause playback */
   pause(): Promise<void>;
   /** Resume playback */
@@ -45,9 +58,9 @@ export interface VinaraaPlayerPlugin {
   /** Set volume 0.0-1.0 */
   setVolume(options: { volume: number }): Promise<void>;
   /** Add event listener for player events */
-  addListener(eventName: 'playbackStateChanged' | 'songChanged' | 'error' | 'nextTrack' | 'previousTrack', listenerFunc: (event: any) => void): Promise<{ remove: () => void }>;
+  addListener(eventName: 'playbackStateChanged' | 'songChanged' | 'error' | 'nextTrack' | 'previousTrack' | 'progress', listenerFunc: (event: any) => void): Promise<{ remove: () => void }>;
   /** Download song natively */
-  download(options: { url: string; title?: string; fileName?: string }): Promise<{ downloadId: number; status?: string; localPath?: string; streamUrl?: string }>;
+  download(options: { url: string; title?: string; fileName?: string }): Promise<{ downloadId: number; status?: string; path?: string; streamUrl?: string }>;
 }
 
 /**

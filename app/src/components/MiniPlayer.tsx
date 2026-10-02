@@ -1,15 +1,35 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { usePlayerStore } from '@/store/player';
+import { useProgressStore } from '@/store/progress';
 import { Play, Pause, SkipForward } from 'lucide-react';
 import { springs } from '@/motion';
 import Marquee from './Marquee';
 
+import { useShallow } from 'zustand/react/shallow';
+
 export default function MiniPlayer() {
-  const { queue, currentIndex, isPlaying, togglePlay, nextTrack, setShowPlayer, showPlayer, positionMs, durationMs } = usePlayerStore();
+  const { queue, currentIndex, isPlaying, togglePlay, nextTrack, setShowPlayer, showPlayer } = usePlayerStore(
+    useShallow((s) => ({
+      queue: s.queue,
+      currentIndex: s.currentIndex,
+      isPlaying: s.isPlaying,
+      togglePlay: s.togglePlay,
+      nextTrack: s.nextTrack,
+      setShowPlayer: s.setShowPlayer,
+      showPlayer: s.showPlayer,
+    }))
+  );
+  const { positionMs, durationMs, epoch } = useProgressStore(
+    useShallow((s) => ({
+      positionMs: s.positionMs,
+      durationMs: s.durationMs,
+      epoch: s.epoch,
+    }))
+  );
   const navigate = useNavigate();
   const song = queue[currentIndex];
-  const progress = durationMs > 0 ? (positionMs / durationMs) * 100 : 0;
+  const progress = durationMs > 0 ? (positionMs / durationMs) : 0;
 
   if (!song || showPlayer) return null;
 
@@ -52,7 +72,7 @@ export default function MiniPlayer() {
           </div>
         </button>
         <div className="absolute bottom-0 left-4 right-4 h-0.5 bg-border rounded-full overflow-hidden">
-          <div className="h-full bg-primary rounded-full transition-all duration-300" style={{ width: `${progress}%` }} />
+          <div key={epoch} className="h-full bg-primary origin-left" style={{ transform: `scaleX(${progress})` }} />
         </div>
       </motion.div>
     </AnimatePresence>

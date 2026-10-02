@@ -1,17 +1,23 @@
 import { VinaraaPlayer } from '@/native/player';
 import { usePlayerStore } from '@/store/player';
-import { recommendations, tracking } from '@/api/endpoints';
+import { useProgressStore } from '@/store/progress';
+import { recommendations } from '@/api/endpoints';
 import { formatPlayerSong } from '@/utils/song';
 import { updateMediaSession } from './MediaSessionService';
 import { App } from '@capacitor/app';
+import { useUIStore } from '@/store/ui';
 
 let started = false;
 let loadedId: string | null = null;
 let fetchingMore = false;
-let currentSessionId: string | null = null;
-let activeSongIdForTracking: string | null = null;
-let lastHeartbeatMs = 0;
-let lastQueueLength = 0;
+let lastQueueVersion = 0;
+let queueVersion = 0;
+let nativeLoaded = false;
+let consecutiveErrors = 0;
+
+export function markQueueMutation() {
+  queueVersion++;
+}
 
 export function startPlayerEngine() {
   if (started) return;
@@ -22,11 +28,13 @@ export function startPlayerEngine() {
     try {
       const res = await VinaraaPlayer.checkIntent();
       if (res.openPlayer) {
-        st.getState().setShowPlayer(true);
+        window.dispatchEvent(new Event('openPlayerIntent'));
       }
     } catch (e) {}
   };
   checkNotificationIntent();
+  
+  // We don't push queue to native on startup. We wait for play toggle (nativeLoaded).
   App.addListener('appStateChange', ({ isActive }) => {
     if (isActive) checkNotificationIntent();
   });
@@ -39,27 +47,10 @@ export function startPlayerEngine() {
     const song = s.queue[s.currentIndex];
 
     // A) Queue or current song changed
-    if (song && (song.id !== loadedId || s.queue.length !== lastQueueLength)) {
-      const oldPosition = prev.positionMs || 0;
-      const targetSongId = song.id;
-      activeSongIdForTracking = targetSongId;
-
-      if (currentSessionId && oldPosition > 0) {
-        const oldSession = currentSessionId;
-        currentSessionId = null;
-        tracking.endSession(oldSession, Math.round(oldPosition)).catch(() => {});
-      }
-
+    if (song && (song.id !== loadedId || queueVersion !== lastQueueVersion)) {
       loadedId = song.id;
-      lastQueueLength = s.queue.length;
-      lastHeartbeatMs = 0;
+      lastQueueVersion = queueVersion;
       console.log(`[Player Engine] Syncing queue to native:`, song.name, song.streamUrl);
-
-      tracking.startSession(targetSongId).then((res) => {
-        if (res?.sessionId && activeSongIdForTracking === targetSongId) {
-          currentSessionId = res.sessionId;
-        }
-      }).catch(() => {});
 
       await VinaraaPlayer.setQueue({
         items: s.queue.map((q) => ({
@@ -90,7 +81,26 @@ export function startPlayerEngine() {
     // B) Play state toggled
     if (song && s.desiredPlaying !== prev.desiredPlaying) {
       if (s.desiredPlaying) {
-        await VinaraaPlayer.resume();
+        if (!nativeLoaded) {
+          nativeLoaded = true;
+          loadedId = song.id;
+          lastQueueVersion = queueVersion;
+          await VinaraaPlayer.setQueue({
+            items: s.queue.map((q) => ({
+              songId: q.id,
+              streamUrl: q.streamUrl!,
+              title: q.name,
+              artist: q.artist,
+              artwork: q.image,
+            })),
+            startIndex: s.currentIndex,
+            repeatMode: s.repeat,
+            positionMs: useProgressStore.getState().positionMs,
+            play: true,
+          }).catch(console.error);
+        } else {
+          await VinaraaPlayer.resume();
+        }
       } else {
         await VinaraaPlayer.pause();
       }
@@ -112,31 +122,34 @@ export function startPlayerEngine() {
         if (newItems.length) {
           usePlayerStore.getState().appendToQueue(newItems);
         }
-      }).finally(() => { fetchingMore = false; });
+      }).catch(console.error).finally(() => { setTimeout(() => { fetchingMore = false; }, 2000); });
     }
   });
 
   VinaraaPlayer.addListener('songChanged', (e: any) => {
     if (typeof e.index === 'number' && e.index >= 0) {
       const s = st.getState();
+      const p = useProgressStore.getState();
+      const song = s.queue[e.index];
       if (s.currentIndex !== e.index) {
-        const nextSong = s.queue[e.index];
-        if (nextSong) {
-          loadedId = nextSong.id;
-          activeSongIdForTracking = nextSong.id;
-          if (currentSessionId) {
-             tracking.endSession(currentSessionId, Math.round(s.positionMs || 0)).catch(() => {});
-             currentSessionId = null;
-          }
-          lastHeartbeatMs = 0;
-          tracking.startSession(nextSong.id).then((res) => {
-             if (res?.sessionId && activeSongIdForTracking === nextSong.id) {
-               currentSessionId = res.sessionId;
-             }
-          }).catch(() => {});
+        if (song) {
+          loadedId = song.id;
         }
-        st.setState({ currentIndex: e.index, isPlaying: e.isPlaying ?? true, positionMs: 0 });
+        st.setState({ currentIndex: e.index, isPlaying: e.isPlaying ?? true });
       }
+      useProgressStore.setState({ positionMs: 0, durationMs: song?.durationMs ?? 0, epoch: p.epoch + 1 });
+    }
+  });
+
+  VinaraaPlayer.addListener('progress', (e: any) => {
+    consecutiveErrors = 0;
+    if (!e.songId || e.songId !== loadedId) return; // Stale progress
+    if (st.getState().seekRequestMs == null) {
+      useProgressStore.setState({
+        positionMs: e.positionMs,
+        durationMs: e.durationMs > 0 ? e.durationMs : useProgressStore.getState().durationMs,
+        bufferedMs: e.bufferedMs,
+      });
     }
   });
 
@@ -146,7 +159,7 @@ export function startPlayerEngine() {
       return;
     }
     if (e.type === 'seeked' && typeof e.positionMs === 'number') {
-      st.setState({ positionMs: e.positionMs });
+      useProgressStore.setState({ positionMs: e.positionMs });
       return;
     }
     if (typeof e.isPlaying === 'boolean') {
@@ -154,14 +167,23 @@ export function startPlayerEngine() {
     }
   });
 
-  VinaraaPlayer.addListener('error', () => {
-    st.setState({ isPlaying: false, desiredPlaying: false });
-    setTimeout(() => {
-      const s = st.getState();
-      if (!s.isPlaying && s.queue.length > s.currentIndex + 1) {
-        s.nextTrack();
-      }
-    }, 1000);
+  VinaraaPlayer.addListener('error', (e: any) => {
+    console.error('Player error:', e);
+    consecutiveErrors++;
+    if (consecutiveErrors >= 3) {
+      VinaraaPlayer.stop().catch(() => {});
+      st.setState({ isPlaying: false, desiredPlaying: false });
+      useUIStore.getState().addToast('Playback failed consecutively. Please try again later.', 'error');
+      consecutiveErrors = 0;
+    } else {
+      st.setState({ isPlaying: false, desiredPlaying: false });
+      setTimeout(() => {
+        const s = st.getState();
+        if (!s.isPlaying && s.queue.length > s.currentIndex + 1) {
+          s.nextTrack();
+        }
+      }, 1000);
+    }
   });
 
   VinaraaPlayer.addListener('nextTrack', () => {
@@ -171,28 +193,7 @@ export function startPlayerEngine() {
     st.getState().previousTrack();
   });
 
-  // 3) Polling
-  setInterval(async () => {
-    if (!st.getState().queue.length) return;
-    const n = await VinaraaPlayer.getState().catch(() => null);
-    if (n) {
-      const nativeDur = n.durationMs;
-      if (st.getState().seekRequestMs == null) {
-        st.setState({
-          positionMs: n.positionMs,
-          durationMs: nativeDur && nativeDur > 0 ? nativeDur : st.getState().durationMs,
-        });
-      }
-
-      if (currentSessionId && n.positionMs - lastHeartbeatMs >= 10000) {
-        lastHeartbeatMs = n.positionMs;
-        tracking.heartbeat(currentSessionId, {
-          positionMs: Math.round(n.positionMs),
-          state: st.getState().isPlaying ? 'playing' : 'paused',
-        }).catch(() => {});
-      }
-    }
-  }, 500);
+  // Removed blind polling
 }
 
 function onEnded() {

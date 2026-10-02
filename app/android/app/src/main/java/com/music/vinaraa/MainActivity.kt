@@ -7,27 +7,22 @@ import com.getcapacitor.BridgeActivity
 
 class MainActivity : BridgeActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        val splash = androidx.core.splashscreen.SplashScreen.installSplashScreen(this)
         registerPlugin(VinaraaPlayerPlugin::class.java)
         super.onCreate(savedInstanceState)
+        
+        var keep = true
+        splash.setKeepOnScreenCondition { keep }
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ keep = false }, 2500)
+        VinaraaPlayerPlugin.onAppReady = { keep = false }
 
         window.statusBarColor = Color.TRANSPARENT
         window.navigationBarColor = Color.TRANSPARENT
         WindowCompat.setDecorFitsSystemWindows(window, false)
-
-        checkOpenPlayerIntent(intent)
     }
 
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        checkOpenPlayerIntent(intent)
-    }
-
-    private fun checkOpenPlayerIntent(intent: android.content.Intent?) {
-        val openPlayer = intent?.getBooleanExtra("OPEN_PLAYER", false) ?: false
-        if (openPlayer) {
-            intent?.removeExtra("OPEN_PLAYER")
-            bridge?.triggerJSEvent("openPlayerIntent", "window")
-        }
     }
 }

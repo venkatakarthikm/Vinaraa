@@ -1,6 +1,9 @@
 import { usePlayerStore } from '@/store/player';
 
+import { Capacitor } from '@capacitor/core';
+
 export function updateMediaSession() {
+  if (Capacitor.isNativePlatform()) return;
   if (!('mediaSession' in navigator)) return;
   const song = usePlayerStore.getState().currentSong();
   if (!song) return;

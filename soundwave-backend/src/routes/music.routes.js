@@ -174,6 +174,45 @@ router.get(
 
 /* ── albums / artists / editorial playlists / modules ────────── */
 router.get(
+  '/albums/resolve',
+  asyncHandler(async (req, res) => {
+    const link = req.query.link;
+    if (!link) throw AppError.badRequest('Missing link parameter');
+    
+    try {
+      const u = new URL(link);
+      if (!u.hostname.includes('jiosaavn.com') && !u.hostname.includes('saavn.com')) {
+         throw new Error('Invalid host');
+      }
+    } catch {
+      throw AppError.badRequest('Invalid JioSaavn link');
+    }
+
+    const { id } = await catalog.resolveAlbumLink(link);
+    
+    const { album, stale } = await catalog.getAlbum(id);
+    if (!album) throw AppError.notFound('Album not found', 'ALBUM_NOT_FOUND');
+    const local = await Song.find({ 'album.id': String(album.id || id) }).lean();
+    const songs = (album.songs || album.list || []).map((raw) => {
+      const normalized = catalog.normalizeSong(raw);
+      const hit = local.find((l) => l.saavnId === normalized.saavnId);
+      return catalog.toClientSong(hit || normalized);
+    });
+    return ok(res, {
+      id: String(album.id || id),
+      name: catalog.decode(album.name),
+      year: album.year,
+      language: album.language,
+      songCount: album.songCount || songs.length,
+      image: catalog.maxQualityImage(album.image || []),
+      artists: (Array.isArray(album.artists) ? album.artists : (album.artists?.all || [])).map((a) => ({ id: a.id, name: catalog.decode(a.name), role: a.role, image: catalog.maxQualityImage(a.image || []) })),
+      songs,
+      stale,
+    });
+  })
+);
+
+router.get(
   '/albums/:id',
   asyncHandler(async (req, res) => {
     const { album, stale } = await catalog.getAlbum(req.params.id);
@@ -201,18 +240,22 @@ router.get(
 router.get(
   '/artists/:id',
   asyncHandler(async (req, res) => {
+    const page = Number(req.query.page) || 0;
+    const songCount = Number(req.query.songCount) || 50;
+    const albumCount = Number(req.query.albumCount) || 50;
+    
     // The upstream has a known bug returning plain text for some artist ids —
     // fall back to our own catalogue so this endpoint never 500s.
     const localEntity = await require('../models/Entity').findOne({ entityId: String(req.params.id) }).lean();
     const localSongs = await Song.find({ $or: [{ 'singers.id': String(req.params.id) }, { 'musicDirectors.id': String(req.params.id) }] })
       .sort({ 'metrics.trendingScore': -1, playCount: -1 })
-      .limit(50)
+      .limit(songCount)
       .lean();
 
     let upstreamArtist = null;
     let stale = false;
     try {
-      const result = await catalog.getArtist(req.params.id);
+      const result = await catalog.getArtist(req.params.id, { page, songCount, albumCount });
       upstreamArtist = result.artist;
       stale = result.stale;
     } catch (err) {
@@ -230,8 +273,8 @@ router.get(
       image: catalog.maxQualityImage(upstreamArtist?.image || []) || localEntity?.image,
       followerCount: upstreamArtist?.followerCount || localEntity?.followerCount || 0,
       bio: upstreamArtist?.bio || localEntity?.description,
-      topSongs: [...merged.values()].map((x) => catalog.toClientSong(x)).slice(0, 30),
-      upstreamTopSongs: normalizedPool.map((x) => catalog.toClientSong(x)).slice(0, 30),
+      topSongs: [...merged.values()].map((x) => catalog.toClientSong(x)),
+      upstreamTopSongs: normalizedPool.map((x) => catalog.toClientSong(x)),
       albums: (upstreamArtist?.topAlbums || []).map((a) => ({ id: String(a.id), name: catalog.decode(a.name), year: a.year, image: catalog.maxQualityImage(a.image || []), songCount: a.songCount })),
       source: upstreamArtist ? 'upstream+catalogue' : 'catalogue',
       stale,
@@ -267,6 +310,7 @@ router.get(
       .filter(Boolean)
       .slice(0, 5);
     const { rails, stale } = await catalog.getModules(languages, { limit: Number(req.query.limit) || 10 }).catch(() => ({ rails: [], stale: true }));
+    res.setHeader('Cache-Control', 'public, max-age=60'); // A15-7
     return ok(res, { languages, rails, stale });
   })
 );
@@ -278,6 +322,7 @@ router.get(
     const language = req.query.language || req.user?.preferences?.languages?.[0];
     const limit = Math.min(Number(req.query.limit) || 30, 50);
     const local = await catalog.trendingFromCatalogue({ language, limit });
+    res.setHeader('Cache-Control', 'public, max-age=60'); // A15-7
     return ok(res, { language, items: local.map((x) => catalog.toClientSong(x)), source: local.length ? 'catalogue' : 'empty' });
   })
 );
@@ -306,7 +351,9 @@ router.get(
   authenticate,
   validate(s.streamSchema),
   asyncHandler(async (req, res) => {
-    const { quality, mode } = req.query;
+    const { quality } = req.query;
+    // Default to redirect to save Render bandwidth. Proxy costs bandwidth.
+    const mode = req.query.mode === 'proxy' ? 'proxy' : 'redirect';
     const { song } = await catalog.getSong(req.params.id);
     if (!song) throw AppError.notFound('Song not found', 'SONG_NOT_FOUND');
 
@@ -321,6 +368,7 @@ router.get(
     }
 
     // True proxy with Range passthrough (seek support).
+    // WARNING: This consumes Render bandwidth.
     const headers = { 'user-agent': 'Mozilla/5.0 (Linux; Android 14) SoundWave/1.0' };
     if (req.headers.range) headers.range = req.headers.range;
     const upstream = await fetch(chosen.url, { headers });
@@ -333,6 +381,7 @@ router.get(
     }
     res.setHeader('Cache-Control', 'private, max-age=600');
     res.setHeader('X-Audio-Quality', chosen.quality);
+    res.setHeader('X-Bandwidth-Warning', 'proxy-mode-in-use'); // A15-8
     if (!upstream.body) return res.end();
     return Readable.fromWeb(upstream.body).pipe(res);
   })

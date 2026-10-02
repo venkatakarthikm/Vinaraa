@@ -12,8 +12,16 @@ interface QueueSheetProps {
   onClose: () => void;
 }
 
+import { useShallow } from 'zustand/react/shallow';
+
 export default function QueueSheet({ isOpen, onClose }: QueueSheetProps) {
-  const { queue, currentIndex, setQueue } = usePlayerStore();
+  const { queue, currentIndex, setQueue } = usePlayerStore(
+    useShallow((s) => ({
+      queue: s.queue,
+      currentIndex: s.currentIndex,
+      setQueue: s.setQueue,
+    }))
+  );
   const [selectedSong, setSelectedSong] = useState<Song | null>(null);
   const [songSheetOpen, setSongSheetOpen] = useState(false);
 

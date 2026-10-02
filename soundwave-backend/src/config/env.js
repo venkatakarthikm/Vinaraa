@@ -9,7 +9,6 @@ const list = (v, d = []) =>
 
 const DEFAULTS = {
   JWT_ACCESS_SECRET: 'dev-only-access-secret-change-me-please-0000000000',
-  JWT_REFRESH_SECRET: 'dev-only-refresh-secret-change-me-please-000000000',
   ADMIN_API_KEY: 'dev-only-admin-key-change-me',
 };
 
@@ -25,9 +24,6 @@ const env = {
 
   // ── Auth ────────────────────────────────────────────────────
   JWT_ACCESS_SECRET: process.env.JWT_ACCESS_SECRET || DEFAULTS.JWT_ACCESS_SECRET,
-  JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET || DEFAULTS.JWT_REFRESH_SECRET,
-  ACCESS_TOKEN_TTL: process.env.ACCESS_TOKEN_TTL || '365d',
-  REFRESH_TOKEN_TTL_DAYS: num(process.env.REFRESH_TOKEN_TTL_DAYS, 365),
   BCRYPT_ROUNDS: num(process.env.BCRYPT_ROUNDS, 12),
 
   // ── Upstream JioSaavn pool ──────────────────────────────────
@@ -90,12 +86,14 @@ env.recoWeights = {
 
 /** Fail loudly instead of silently shipping dev secrets to production. */
 env.assertProductionSecrets = function assertProductionSecrets() {
-  if (!env.isProd) return [];
   const problems = [];
-  for (const [key, devDefault] of Object.entries(DEFAULTS)) {
-    if (env[key] === devDefault) problems.push(`${key} is still the development default`);
+  if (env.isProd) {
+    for (const [key, devDefault] of Object.entries(DEFAULTS)) {
+      if (env[key] === devDefault) problems.push(`${key} is still the development default`);
+    }
   }
   if (!env.MONGODB_URI.startsWith('mongodb')) problems.push('MONGODB_URI is not a mongodb connection string');
+  if (env.isProd && !env.PUBLIC_BASE_URL) problems.push('PUBLIC_BASE_URL is not set');
   return problems;
 };
 

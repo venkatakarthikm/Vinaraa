@@ -15,8 +15,15 @@ interface SongActionSheetProps {
   onRemoveFromPlaylist?: () => void;
 }
 
+import { useShallow } from 'zustand/react/shallow';
+
 export default function SongActionSheet({ song, isOpen, onClose, onRemoveFromPlaylist }: SongActionSheetProps) {
-  const { appendToQueue, playNext } = usePlayerStore();
+  const { appendToQueue, playNext } = usePlayerStore(
+    useShallow((s) => ({
+      appendToQueue: s.appendToQueue,
+      playNext: s.playNext,
+    }))
+  );
   const { addToast } = useUIStore();
   const [showSaveSheet, setShowSaveSheet] = useState(false);
   const [userPlaylists, setUserPlaylists] = useState<any[]>([]);

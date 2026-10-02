@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence, useDragControls } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { usePlayerStore } from '@/store/player';
-import { tracking, playlists } from '@/api/endpoints';
+import { useProgressStore } from '@/store/progress';
+import { playlists } from '@/api/endpoints';
 import {
   ChevronDown, Heart, MoreHorizontal, SkipBack, SkipForward,
   Play, Pause, Shuffle, Repeat, Repeat1, Share2, Download, Plus, ListMusic, Info
@@ -13,6 +14,7 @@ import { useUIStore } from '@/store/ui';
 import Marquee from '@/components/Marquee';
 import QueueSheet from '@/components/QueueSheet';
 import { saveDownloadedSong } from '@/utils/offline';
+import { getCachedLyrics, setCachedLyrics, fetchLrclib } from '@/utils/lyrics';
 
 type PlayerTab = 'photo' | 'lyrics' | 'info';
 
@@ -22,12 +24,34 @@ function formatTime(ms: number) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
+import { useShallow } from 'zustand/react/shallow';
+
 export default function FullPlayer() {
   const {
-    isPlaying, positionMs, durationMs,
+    isPlaying,
     repeat, shuffle, togglePlay, seekTo, nextTrack, previousTrack,
-    setRepeat, setShuffle, setShowPlayer, sessionId, setSessionId, currentSong
-  } = usePlayerStore();
+    setRepeat, setShuffle, setShowPlayer, currentSong
+  } = usePlayerStore(
+    useShallow((s) => ({
+      isPlaying: s.isPlaying,
+      repeat: s.repeat,
+      shuffle: s.shuffle,
+      togglePlay: s.togglePlay,
+      seekTo: s.seekTo,
+      nextTrack: s.nextTrack,
+      previousTrack: s.previousTrack,
+      setRepeat: s.setRepeat,
+      setShuffle: s.setShuffle,
+      setShowPlayer: s.setShowPlayer,
+      currentSong: s.currentSong,
+    }))
+  );
+  const { positionMs, durationMs } = useProgressStore(
+    useShallow((s) => ({
+      positionMs: s.positionMs,
+      durationMs: s.durationMs,
+    }))
+  );
   const navigate = useNavigate();
   const { addToast } = useUIStore();
   const [playerTab, setPlayerTab] = useState<PlayerTab>('photo');
@@ -38,72 +62,63 @@ export default function FullPlayer() {
   const [showQueueSheet, setShowQueueSheet] = useState(false);
   const [showTopMenu, setShowTopMenu] = useState(false);
 
-  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const positionRef = useRef(positionMs);
   const lyricsContainerRef = useRef<HTMLDivElement>(null);
   const dragControls = useDragControls();
 
-  positionRef.current = positionMs;
   const song = currentSong();
-
-  const sessionIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!song?.id) return;
-    let currentSessionId = '';
-    tracking.startSession(song.id).then((s) => {
-      currentSessionId = s.sessionId;
-      sessionIdRef.current = s.sessionId;
-      setSessionId(s.sessionId);
-    }).catch(() => {});
     playlists.isLiked(song.id).then((res) => setLiked(res.liked)).catch(() => {});
-    return () => {
-      const sid = currentSessionId || sessionIdRef.current;
-      if (sid) tracking.endSession(sid, Math.round(positionRef.current)).catch(() => {});
-    };
   }, [song?.id]);
 
+  // VINARAA-FIX: reset lyrics when song changes, use utils/lyrics for fetch and cache with AbortController
   useEffect(() => {
-    if (!sessionId) return;
-    heartbeatRef.current = setInterval(() => {
-      tracking.heartbeat(sessionId, { positionMs: Math.round(positionRef.current), state: isPlaying ? 'playing' : 'paused' }).catch(() => {});
-    }, 12000);
-    return () => { if (heartbeatRef.current) clearInterval(heartbeatRef.current); };
-  }, [sessionId, isPlaying]);
+    setLyrics(null);
+  }, [song?.id]);
 
-  const loadLrclib = async (songName: string, artistName: string) => {
+  const fetchLyricsData = async (forceSearch = false) => {
+    if (!song?.id) return;
     try {
-      const name = songName.replace(/\s*[\(\[].*?[\)\]]/g, '');
-      const url = `https://lrclib.net/api/search?track_name=${encodeURIComponent(name)}&artist_name=${encodeURIComponent(artistName)}`;
-      const res = await fetch(url);
-      const data = await res.json();
-      const hit = data.find((x: any) => x.syncedLyrics) || data.find((x: any) => x.plainLyrics);
-      if (hit) {
-        if (hit.syncedLyrics) {
-          const parsed = hit.syncedLyrics.split('\n').map((l: string) => {
-            const m = l.match(/^\[(\d+):(\d+(?:\.\d+)?)\](.*)/);
-            return m ? { t: +m[1] * 60 + +m[2], x: m[3].trim() || '♪' } : null;
-          }).filter(Boolean);
-          setLyrics({ type: 'synced', lines: parsed });
-        } else {
-          setLyrics({ type: 'plain', lyrics: hit.plainLyrics });
+      if (!forceSearch) {
+        const cached = await getCachedLyrics(song.id);
+        if (cached) {
+          setLyrics(cached);
+          return;
         }
+      }
+      setLyrics(null); // Show loading
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const data = await fetchLrclib(song.name, song.artist.split(',')[0], durationMs || song.durationMs || 0, controller.signal);
+      clearTimeout(timeoutId);
+      
+      if (data) {
+        setLyrics(data);
+        await setCachedLyrics(song.id, data);
       } else {
-        setLyrics({ lyrics: 'No lyrics found.' });
+        setLyrics({ notFound: true });
+        await setCachedLyrics(song.id, { notFound: true });
       }
     } catch {
-      setLyrics({ lyrics: 'Lyrics unavailable.' });
+      setLyrics({ notFound: true });
     }
   };
 
+  // VINARAA-FIX: call fetchLyricsData when lyrics tab is open
   useEffect(() => {
     if (playerTab === 'lyrics' && song?.id && !lyrics) {
-      loadLrclib(song.name, song.artist.split(',')[0]);
+      fetchLyricsData();
     }
-  }, [playerTab, song?.id]);
+  }, [playerTab, song?.id, lyrics]);
+
+  // VINARAA-FIX: calculate activeLyricIndex to prevent unnecessary scrolling
+  const activeLyricIndex = lyrics?.type === 'synced' ? lyrics.lines.findIndex((l: any, i: number) => {
+    return (positionMs / 1000) >= l.t && (i === lyrics.lines.length - 1 || (positionMs / 1000) < lyrics.lines[i + 1].t);
+  }) : -1;
 
   useEffect(() => {
-    if (playerTab === 'lyrics' && lyrics?.type === 'synced' && lyricsContainerRef.current) {
+    if (playerTab === 'lyrics' && lyrics?.type === 'synced' && lyricsContainerRef.current && activeLyricIndex !== -1) {
       const activeEl = lyricsContainerRef.current.querySelector('#active-lyric');
       if (activeEl) {
         const container = lyricsContainerRef.current;
@@ -111,7 +126,7 @@ export default function FullPlayer() {
         container.scrollTo({ top: scrollTarget, behavior: 'smooth' });
       }
     }
-  }, [positionMs, playerTab, lyrics]);
+  }, [activeLyricIndex, playerTab, lyrics]);
 
   const seekValRef = useRef(0);
   const effectiveDuration = durationMs > 0 ? durationMs : (song?.durationMs || 0);
@@ -132,7 +147,7 @@ export default function FullPlayer() {
     const targetFraction = seekValRef.current;
     const newPos = Math.round(Math.max(0, Math.min(effectiveDuration - 500, targetFraction * effectiveDuration)));
     seekTo(newPos);
-    usePlayerStore.setState({ positionMs: newPos });
+    useProgressStore.setState({ positionMs: newPos });
     setSeeking(false);
   };
 
@@ -172,7 +187,7 @@ export default function FullPlayer() {
     try {
       addToast(`Downloading ${song.name}…`, 'info');
       const safeName = song.name.replace(/[^a-zA-Z0-9.\-_ \(\)]/g, '');
-      await VinaraaPlayer.download({ url: song.streamUrl, title: song.name, fileName: `${safeName}.mp3` });
+      const res = await VinaraaPlayer.download({ url: song.streamUrl, title: song.name, fileName: `${safeName}.mp3` });
       await saveDownloadedSong({
         id: song.id,
         name: song.name,
@@ -180,9 +195,10 @@ export default function FullPlayer() {
         image: song.image,
         durationMs: song.durationMs,
         streamUrl: song.streamUrl,
+        localPath: res.path,
         downloadedAt: Date.now(),
       });
-      addToast('Download started in background', 'success');
+      addToast('Download completed', 'success');
     } catch (e: any) {
       addToast(e?.message || 'Download failed', 'error');
     }
@@ -301,11 +317,18 @@ export default function FullPlayer() {
               ref={lyricsContainerRef}
               className="h-full overflow-y-auto scroll-y text-center py-4 px-2 select-none relative"
               onPointerDown={(e) => e.stopPropagation()}>
+              {/* VINARAA-FIX: Added empty state with Search again button */}
               {!lyrics ? <p className="text-muted pt-20">Loading lyrics…</p>
+                : lyrics.notFound ? (
+                  <div className="flex flex-col items-center justify-center pt-20 gap-4">
+                    <p className="text-muted">No lyrics found.</p>
+                    <button onClick={() => fetchLyricsData(true)} className="px-6 py-2 bg-surface-2 border border-border rounded-pill text-sm font-semibold">Search again</button>
+                  </div>
+                )
                 : lyrics.type === 'synced' ? (
                   <div className="flex flex-col gap-4 pb-[50vh] pt-[25vh]">
                     {lyrics.lines.map((l: any, i: number) => {
-                      const isActive = (positionMs / 1000) >= l.t && (i === lyrics.lines.length - 1 || (positionMs / 1000) < lyrics.lines[i + 1].t);
+                      const isActive = i === activeLyricIndex;
                       return (
                         <p key={i} id={isActive ? 'active-lyric' : undefined} 
                           className={`text-2xl font-bold transition-all duration-500 ease-out ${isActive ? 'text-primary-soft scale-110 drop-shadow-[0_0_12px_rgba(139,61,255,0.8)]' : 'text-text/30'}`}>
@@ -314,9 +337,9 @@ export default function FullPlayer() {
                       );
                     })}
                   </div>
-                ) : lyrics.lyrics ? (
+                ) : lyrics.type === 'plain' ? (
                   <pre className="text-text/80 font-sans text-lg leading-10 whitespace-pre-wrap pb-[30vh] pt-4">{lyrics.lyrics}</pre>
-                ) : <p className="text-muted pt-20">Lyrics not available</p>}
+                ) : null}
             </motion.div>
           )}
           {playerTab === 'info' && (

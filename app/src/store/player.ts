@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { ensurePlayable } from '@/player/resolve';
+import { markQueueMutation } from '@/player/engine';
 
 export type RepeatMode = 'off' | 'all' | 'one';
 
@@ -13,6 +15,7 @@ export interface Song {
   durationMs?: number;
   language?: string;
   streamUrl?: string;
+  localPath?: string;
   formats?: any[];
   downloadUrls?: { quality: string; url: string }[];
   singers?: { id: string; name: string }[];
@@ -23,7 +26,6 @@ export interface Song {
 
 interface PlayerState {
   queue: Song[];
-  history: Song[];
   currentIndex: number;
   isPlaying: boolean;
   desiredPlaying: boolean;
@@ -36,7 +38,7 @@ interface PlayerState {
   sessionId: string | null;
   seekRequestMs: number | null;
 
-  setQueue: (songs: Song[], startIndex?: number) => void;
+  setQueue: (songs: Song[], startIndex?: number, source?: string, contextId?: string) => Promise<void>;
   appendToQueue: (songs: Song[]) => void;
   playNext: (song: Song) => void;
   setPlaying: (isPlaying: boolean) => void;
@@ -60,7 +62,6 @@ export const usePlayerStore = create<PlayerState>()(
   persist(
     (set, get) => ({
       queue: [],
-      history: [],
       currentIndex: 0,
       isPlaying: false,
       desiredPlaying: false,
@@ -73,28 +74,65 @@ export const usePlayerStore = create<PlayerState>()(
       sessionId: null,
       seekRequestMs: null,
 
-      setQueue: (songs, startIndex = 0) => {
+      setQueue: async (songs, startIndex = 0, source, contextId) => {
         const song = songs[startIndex];
+        if (!song) return;
+        const playableSong = await ensurePlayable(song);
+        const resolvedSongs = [...songs];
+        resolvedSongs[startIndex] = playableSong;
+        
+        import('@/native/player').then(({ VinaraaPlayer }) => {
+          VinaraaPlayer.setPlaybackContext({ source, contextId }).catch(() => {});
+        });
+
+        markQueueMutation();
         set({
-          queue: songs,
+          queue: resolvedSongs,
           currentIndex: startIndex,
           positionMs: 0,
-          durationMs: song?.durationMs || 0,
-          history: [],
+          durationMs: playableSong?.durationMs || 0,
           isPlaying: true,
           desiredPlaying: true,
         });
       },
-      appendToQueue: (songs) => set((state) => ({ queue: [...state.queue, ...songs] })),
-      playNext: (song) => {
+      appendToQueue: async (songs) => {
+        const playableSongs = await Promise.all(songs.map(ensurePlayable));
+        set((state) => ({ queue: [...state.queue, ...playableSongs] }));
+        markQueueMutation();
+        const items = playableSongs.map(s => ({
+          songId: s.id, streamUrl: s.streamUrl!, title: s.name, artist: s.artist, artwork: s.image
+        }));
+        import('@/native/player').then(({ VinaraaPlayer }) => {
+          VinaraaPlayer.appendItems({ items }).catch(console.error);
+        });
+      },
+      playNext: async (song) => {
+        const s = await ensurePlayable(song);
         const { queue, currentIndex } = get();
         if (!queue.length) {
-          get().setQueue([song], 0);
+          get().setQueue([s], 0);
           return;
         }
+        
+        // Dedup check
+        const existingIdx = queue.findIndex((q, i) => i > currentIndex && q.id === s.id);
         const updated = [...queue];
-        updated.splice(currentIndex + 1, 0, song);
+        if (existingIdx !== -1) {
+            updated.splice(existingIdx, 1);
+        }
+        updated.splice(currentIndex + 1, 0, s);
         set({ queue: updated });
+        markQueueMutation();
+
+        import('@/native/player').then(({ VinaraaPlayer }) => {
+          if (existingIdx !== -1) {
+            VinaraaPlayer.moveItem({ from: existingIdx, to: currentIndex + 1 }).catch(console.error);
+          } else {
+            VinaraaPlayer.insertNext({
+              item: { songId: s.id, streamUrl: s.streamUrl!, title: s.name, artist: s.artist, artwork: s.image }
+            }).catch(console.error);
+          }
+        });
       },
       setPlaying: (isPlaying) => set({ desiredPlaying: isPlaying, isPlaying }),
       togglePlay: () => set((state) => ({ desiredPlaying: !state.desiredPlaying })),
@@ -111,36 +149,21 @@ export const usePlayerStore = create<PlayerState>()(
           VinaraaPlayer.setRepeatMode({ mode }).catch(() => {});
         });
       },
-      setShuffle: (shuffle) => set({ shuffle }),
+      setShuffle: (shuffle) => {
+        set({ shuffle });
+        import('@/native/player').then(({ VinaraaPlayer }) => {
+          VinaraaPlayer.setShuffle({ shuffle }).catch(() => {});
+        });
+      },
       nextTrack: () => {
-        const { queue, currentIndex, history, repeat, shuffle } = get();
-        const currentSong = queue[currentIndex];
-        if (currentSong) {
-          set({ history: [...history, currentSong] });
-        }
-        if (shuffle && queue.length > 1) {
-          let nextIndex = Math.floor(Math.random() * queue.length);
-          while (nextIndex === currentIndex) nextIndex = Math.floor(Math.random() * queue.length);
-          set({ currentIndex: nextIndex, positionMs: 0, isPlaying: true, desiredPlaying: true });
-          return;
-        }
-        if (currentIndex < queue.length - 1) {
-          set({ currentIndex: currentIndex + 1, positionMs: 0, isPlaying: true, desiredPlaying: true });
-        } else if (repeat === 'all') {
-          set({ currentIndex: 0, positionMs: 0, isPlaying: true, desiredPlaying: true });
-        } else {
-          set({ isPlaying: false, desiredPlaying: false });
-        }
+        import('@/native/player').then(({ VinaraaPlayer }) => {
+          VinaraaPlayer.next().catch(console.error);
+        });
       },
       previousTrack: () => {
-        const { positionMs, currentIndex, history } = get();
-        if (positionMs > 3000) {
-          get().seekTo(0);
-          return;
-        }
-        const newIndex = Math.max(0, currentIndex - 1);
-        const newHistory = history.length > 0 ? history.slice(0, -1) : history;
-        set({ history: newHistory, currentIndex: newIndex, positionMs: 0, isPlaying: true, desiredPlaying: true });
+        import('@/native/player').then(({ VinaraaPlayer }) => {
+          VinaraaPlayer.previous().catch(console.error);
+        });
       },
       setShowPlayer: (show) => set({ showPlayer: show }),
       setShowQueue: (show) => set({ showQueue: show }),
@@ -155,8 +178,6 @@ export const usePlayerStore = create<PlayerState>()(
       partialize: (state) => ({
         queue: state.queue,
         currentIndex: state.currentIndex,
-        positionMs: state.positionMs,
-        durationMs: state.durationMs,
         repeat: state.repeat,
         shuffle: state.shuffle,
       }),

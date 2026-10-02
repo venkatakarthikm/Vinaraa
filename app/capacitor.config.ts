@@ -4,14 +4,11 @@ const config: CapacitorConfig = {
   appId: 'com.music.vinaraa',
   appName: 'Vinaraa',
   webDir: 'dist',
-  plugins: {
-    CapacitorHttp: {
-      enabled: true,
-    },
-    SplashScreen: {
-      backgroundColor: "#0A0A18",
-      launchAutoHide: true,
-    },
+  server: {
+    androidScheme: 'https',
+  },
+  android: {
+    allowMixedContent: false,
   },
 };
 

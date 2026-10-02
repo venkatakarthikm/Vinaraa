@@ -20,12 +20,21 @@ import com.google.common.util.concurrent.ListenableFuture
 @CapacitorPlugin(name = "VinaraaPlayer")
 class VinaraaPlayerPlugin : Plugin() {
 
+    companion object {
+        var onAppReady: (() -> Unit)? = null
+    }
+
     private var player: Player? = null
     private var controllerFuture: ListenableFuture<MediaController>? = null
     private var prefs: SharedPreferences? = null
     private val PREFS_NAME = "vinaraa_auth"
+    
+    private val progressHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var progressRunnable: Runnable? = null
 
     private var isSeeking = false
+    private var currentSource: String? = null
+    private var currentContextId: String? = null
 
     private fun prefs(): SharedPreferences =
         prefs ?: context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).also { prefs = it }
@@ -34,10 +43,10 @@ class VinaraaPlayerPlugin : Plugin() {
         override fun onReceive(context: Context?, intent: android.content.Intent?) {
             when (intent?.action) {
                 PlaybackService.ACTION_NEXT -> {
-                    activity?.runOnUiThread { notifyListeners("nextTrack", JSObject()) }
+                    progressHandler.post { notifyListeners("nextTrack", JSObject()) }
                 }
                 PlaybackService.ACTION_PREVIOUS -> {
-                    activity?.runOnUiThread { notifyListeners("previousTrack", JSObject()) }
+                    progressHandler.post { notifyListeners("previousTrack", JSObject()) }
                 }
             }
         }
@@ -65,7 +74,7 @@ class VinaraaPlayerPlugin : Plugin() {
                     controller?.addListener(object : Player.Listener {
 
                         override fun onIsPlayingChanged(isPlaying: Boolean) {
-                            activity?.runOnUiThread {
+                            progressHandler.post {
                                 val event = JSObject().apply { put("isPlaying", isPlaying) }
                                 notifyListeners("playbackStateChanged", event)
                             }
@@ -73,7 +82,7 @@ class VinaraaPlayerPlugin : Plugin() {
 
                         override fun onPlaybackStateChanged(playbackState: Int) {
                             if (playbackState == Player.STATE_ENDED) {
-                                activity?.runOnUiThread {
+                                progressHandler.post {
                                     val event = JSObject().apply { put("type", "ended") }
                                     notifyListeners("playbackStateChanged", event)
                                 }
@@ -81,12 +90,13 @@ class VinaraaPlayerPlugin : Plugin() {
                         }
 
                         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                            activity?.runOnUiThread {
+                            progressHandler.post {
                                 val idx = player?.currentMediaItemIndex ?: 0
                                 val ret = JSObject().apply {
                                     put("songId", mediaItem?.mediaId)
                                     put("index", idx)
                                     put("isPlaying", player?.isPlaying ?: false)
+                                    put("reason", reason)
                                 }
                                 notifyListeners("songChanged", ret)
                             }
@@ -97,20 +107,18 @@ class VinaraaPlayerPlugin : Plugin() {
                             newPosition: Player.PositionInfo,
                             reason: Int
                         ) {
-                            if (reason == Player.DISCONTINUITY_REASON_SEEK && !isSeeking) {
-                                val seekMs = newPosition.positionMs
-                                activity?.runOnUiThread {
-                                    val event = JSObject().apply {
-                                        put("type", "seeked")
-                                        put("positionMs", seekMs)
-                                    }
-                                    notifyListeners("playbackStateChanged", event)
+                            progressHandler.post {
+                                val event = JSObject().apply {
+                                    put("type", "seeked")
+                                    put("positionMs", newPosition.positionMs)
+                                    put("reason", reason)
                                 }
+                                notifyListeners("playbackStateChanged", event)
                             }
                         }
 
                         override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                            activity?.runOnUiThread {
+                            progressHandler.post {
                                 val event = JSObject().apply { put("error", error.message) }
                                 notifyListeners("error", event)
                             }
@@ -122,6 +130,29 @@ class VinaraaPlayerPlugin : Plugin() {
             },
             ContextCompat.getMainExecutor(context)
         )
+        startProgressTicker()
+    }
+    
+    private fun startProgressTicker() {
+        progressRunnable = object : Runnable {
+            override fun run() {
+                player?.let { p ->
+                    if (p.isPlaying) {
+                        val event = JSObject().apply {
+                            put("songId", p.currentMediaItem?.mediaId)
+                            put("index", p.currentMediaItemIndex)
+                            put("positionMs", p.currentPosition)
+                            put("durationMs", if (p.duration == androidx.media3.common.C.TIME_UNSET) -1L else p.duration)
+                            put("bufferedMs", p.bufferedPosition)
+                            put("state", p.playbackState)
+                        }
+                        notifyListeners("progress", event)
+                    }
+                }
+                progressHandler.postDelayed(this, 500)
+            }
+        }
+        progressHandler.post(progressRunnable!!)
     }
 
     private fun withPlayer(action: (Player) -> Unit) {
@@ -183,12 +214,25 @@ class VinaraaPlayerPlugin : Plugin() {
     }
 
     @PluginMethod
+    fun setConfig(call: PluginCall) {
+        val apiBase = call.getString("apiBase") ?: return call.reject("apiBase required")
+        val deviceId = call.getString("deviceId") ?: return call.reject("deviceId required")
+        TrackingClient.init(context, apiBase, deviceId)
+        call.resolve()
+    }
+
+    @PluginMethod
+    fun setPlaybackContext(call: PluginCall) {
+        currentSource = call.getString("source")
+        currentContextId = call.getString("contextId")
+        call.resolve()
+    }
+
+    @PluginMethod
     fun setAuth(call: PluginCall) {
         val accessToken = call.getString("accessToken", "")
-        val refreshToken = call.getString("refreshToken", "")
         prefs().edit()
             .putString("access_token", accessToken)
-            .putString("refresh_token", refreshToken)
             .apply()
         call.resolve()
     }
@@ -196,10 +240,8 @@ class VinaraaPlayerPlugin : Plugin() {
     @PluginMethod
     fun getAccessToken(call: PluginCall) {
         val token = prefs().getString("access_token", null)
-        val refreshToken = prefs().getString("refresh_token", null)
         val ret = JSObject().apply {
             put("token", token)
-            put("refreshToken", refreshToken)
         }
         call.resolve(ret)
     }
@@ -225,6 +267,10 @@ class VinaraaPlayerPlugin : Plugin() {
                             .setTitle(o.optString("title", ""))
                             .setArtist(o.optString("artist", ""))
                             .setArtworkUri(o.optString("artwork", "").takeIf { it.isNotEmpty() }?.let(Uri::parse))
+                            .setExtras(android.os.Bundle().apply {
+                                putString("source", currentSource)
+                                putString("contextId", currentContextId)
+                            })
                             .build()
                     )
                     .build()
@@ -249,6 +295,128 @@ class VinaraaPlayerPlugin : Plugin() {
     }
 
     @PluginMethod
+    fun insertNext(call: PluginCall) {
+        val o = call.getObject("item") ?: return call.reject("item required")
+        val url = o.optString("streamUrl", "")
+        if (url.isEmpty()) return call.reject("streamUrl empty")
+        withPlayer { p ->
+            val mediaItem = MediaItem.Builder()
+                .setUri(url)
+                .setMediaId(o.optString("songId", ""))
+                .setMediaMetadata(
+                    MediaMetadata.Builder()
+                        .setTitle(o.optString("title", ""))
+                        .setArtist(o.optString("artist", ""))
+                        .setArtworkUri(o.optString("artwork", "").takeIf { it.isNotEmpty() }?.let(Uri::parse))
+                        .build()
+                )
+                .build()
+            val at = if (p.currentMediaItemIndex == androidx.media3.common.C.INDEX_UNSET) 0 else p.currentMediaItemIndex + 1
+            p.addMediaItem(at, mediaItem)
+        }
+        call.resolve()
+    }
+
+    @PluginMethod
+    fun appendItems(call: PluginCall) {
+        val itemsArr = call.getArray("items") ?: return call.reject("items required")
+        val built = ArrayList<MediaItem>()
+        for (i in 0 until itemsArr.length()) {
+            val o = itemsArr.getJSONObject(i)
+            val url = o.optString("streamUrl", "")
+            if (url.isEmpty()) continue
+            built.add(
+                MediaItem.Builder()
+                    .setUri(url)
+                    .setMediaId(o.optString("songId", ""))
+                    .setMediaMetadata(
+                        MediaMetadata.Builder()
+                            .setTitle(o.optString("title", ""))
+                            .setArtist(o.optString("artist", ""))
+                            .setArtworkUri(o.optString("artwork", "").takeIf { it.isNotEmpty() }?.let(Uri::parse))
+                            .build()
+                    )
+                    .build()
+            )
+        }
+        withPlayer { p ->
+            p.addMediaItems(built)
+        }
+        call.resolve()
+    }
+
+    @PluginMethod
+    fun removeAt(call: PluginCall) {
+        val index = call.getInt("index") ?: return call.reject("index required")
+        withPlayer { p ->
+            p.removeMediaItem(index)
+        }
+        call.resolve()
+    }
+
+    @PluginMethod
+    fun moveItem(call: PluginCall) {
+        val from = call.getInt("from") ?: return call.reject("from required")
+        val to = call.getInt("to") ?: return call.reject("to required")
+        withPlayer { p ->
+            p.moveMediaItem(from, to)
+        }
+        call.resolve()
+    }
+
+    @PluginMethod
+    fun skipToIndex(call: PluginCall) {
+        val index = call.getInt("index") ?: return call.reject("index required")
+        withPlayer { p ->
+            p.seekToDefaultPosition(index)
+        }
+        call.resolve()
+    }
+
+    @PluginMethod
+    fun setShuffle(call: PluginCall) {
+        val shuffle = call.getBoolean("shuffle", false) ?: false
+        withPlayer { p ->
+            p.shuffleModeEnabled = shuffle
+        }
+        call.resolve()
+    }
+
+    @PluginMethod
+    fun getQueue(call: PluginCall) {
+        withPlayer { p ->
+            val arr = com.getcapacitor.JSArray()
+            for (i in 0 until p.mediaItemCount) {
+                arr.put(p.getMediaItemAt(i).mediaId)
+            }
+            val ret = JSObject().apply {
+                put("currentIndex", p.currentMediaItemIndex)
+                put("items", arr)
+            }
+            activity?.runOnUiThread { call.resolve(ret) }
+        }
+    }
+
+    @PluginMethod
+    fun clear(call: PluginCall) {
+        withPlayer { p ->
+            p.clearMediaItems()
+        }
+        call.resolve()
+    }
+
+    @PluginMethod
+    fun appReady(call: PluginCall) {
+        call.resolve()
+    }
+
+    @PluginMethod
+    fun appReady(call: PluginCall) {
+        onAppReady?.invoke()
+        call.resolve()
+    }
+
+    @PluginMethod
     fun play(call: PluginCall) {
         val streamUrl = call.getString("streamUrl")?.takeIf { it.isNotBlank() }
             ?: return call.reject("streamUrl is required")
@@ -262,6 +430,10 @@ class VinaraaPlayerPlugin : Plugin() {
                 .setTitle(title)
                 .setArtist(artist)
                 .setArtworkUri(if (artwork != null) Uri.parse(artwork) else null)
+                .setExtras(android.os.Bundle().apply {
+                    putString("source", currentSource)
+                    putString("contextId", currentContextId)
+                })
                 .build()
 
             val mediaItem = MediaItem.Builder()
@@ -386,26 +558,35 @@ class VinaraaPlayerPlugin : Plugin() {
         val fileName = call.getString("fileName") ?: "download.mp3"
 
         activity?.runOnUiThread {
-            try {
-                val request = android.app.DownloadManager.Request(Uri.parse(url))
-                    .setTitle(title)
-                    .setDescription("Downloading $title...")
-                    .setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                    .setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_MUSIC, fileName)
-                    .setAllowedOverMetered(true)
-                    .setAllowedOverRoaming(true)
+            Thread {
+                try {
+                    val client = okhttp3.OkHttpClient()
+                    val req = okhttp3.Request.Builder().url(url).build()
+                    val response = client.newCall(req).execute()
+                    
+                    if (!response.isSuccessful) {
+                        throw Exception("HTTP ${response.code}")
+                    }
 
-                val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as android.app.DownloadManager
-                val downloadId = downloadManager.enqueue(request)
+                    val musicDir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC)
+                    if (musicDir != null && !musicDir.exists()) musicDir.mkdirs()
+                    
+                    val file = java.io.File(musicDir, fileName)
+                    val sink = okio.Okio.buffer(okio.Okio.sink(file))
+                    sink.writeAll(response.body!!.source())
+                    sink.close()
+                    response.close()
 
-                val ret = JSObject().apply {
-                    put("downloadId", downloadId)
-                    put("status", "enqueued")
+                    val ret = JSObject().apply {
+                        put("downloadId", 1)
+                        put("status", "completed")
+                        put("path", file.absolutePath)
+                    }
+                    activity?.runOnUiThread { call.resolve(ret) }
+                } catch (e: Exception) {
+                    activity?.runOnUiThread { call.reject("Download failed: " + e.message, e) }
                 }
-                call.resolve(ret)
-            } catch (e: Exception) {
-                call.reject("Download failed: " + e.message, e)
-            }
+            }.start()
         }
     }
 
@@ -413,6 +594,7 @@ class VinaraaPlayerPlugin : Plugin() {
         try {
             context.unregisterReceiver(mediaReceiver)
         } catch (_: Exception) { }
+        progressRunnable?.let { progressHandler.removeCallbacks(it) }
         controllerFuture?.let { MediaController.releaseFuture(it) }
         player = null
         super.handleOnDestroy()

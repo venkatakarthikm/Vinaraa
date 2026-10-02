@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { BrowserRouter } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient } from '@tanstack/react-query';
 import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import { ToastContainer } from '@/components/Toast';
@@ -8,8 +8,11 @@ import Navigator from '@/navigation/Navigator';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { startPlayerEngine } from '@/player/engine';
 import { usePlayerStore } from '@/store/player';
-import OneSignal from 'onesignal-cordova-plugin';
 import { notifications } from '@/api/endpoints';
+import { API_BASE } from '@/api/client';
+import { getDeviceInfo } from '@/utils/device';
+import { VinaraaPlayer } from '@/native/player';
+import OneSignal from 'onesignal-cordova-plugin';
 
 export function setupOneSignal() {
   if (Capacitor.isNativePlatform()) {
@@ -27,9 +30,6 @@ export function setupOneSignal() {
       }
 
       os.initialize("c7594dd5-a376-4104-ac20-56abe4f1bf42");
-      os.Notifications?.requestPermission?.(true)?.then?.((success: boolean) => {
-        console.log("Notification permission granted " + success);
-      });
 
       const registerToken = (token: string) => {
         if (token) {
@@ -49,24 +49,30 @@ export function setupOneSignal() {
   }
 }
 
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
+import { createIDBPersister } from '@/utils/persister';
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
       refetchOnWindowFocus: false,
       staleTime: 5 * 60 * 1000,
+      gcTime: 1000 * 60 * 60 * 24, // 24 hours
     },
   },
 });
 
+const idbPersister = createIDBPersister();
+
 export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
+    <PersistQueryClientProvider client={queryClient} persistOptions={{ persister: idbPersister }}>
       <BrowserRouter>
         <ToastContainer />
         <AppWrapper />
       </BrowserRouter>
-    </QueryClientProvider>
+    </PersistQueryClientProvider>
   );
 }
 
@@ -79,6 +85,9 @@ function AppWrapper() {
   useEffect(() => {
     startPlayerEngine();
     setupOneSignal();
+    getDeviceInfo().then(device => {
+      VinaraaPlayer.setConfig({ apiBase: API_BASE, deviceId: device.deviceId }).catch(console.error);
+    });
 
     const handleOpenPlayer = () => {
       usePlayerStore.getState().setShowPlayer(true);

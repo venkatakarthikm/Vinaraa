@@ -172,8 +172,11 @@ function toClientSong(song, opts = {}) {
       best: best ? best.url : undefined,
       quality: best ? best.quality : undefined,
       formats: downloads.map((d) => ({ quality: d.quality, bitrate: d.bitrate, url: d.url, format: d.format })),
-      // The streaming route the client should actually call (keeps the upstream URL private).
-      streamUrl: `/api/v1/music/stream/${s.saavnId}${opts.quality ? `?quality=${opts.quality}` : ''}`,
+      // This is the proxy route. It costs Render bandwidth. Do NOT use this for normal playback.
+      // Use audio.best instead which points directly to the CDN.
+      streamUrl: `${env.SERVER_URL || 'https://vinaraa.onrender.com'}/api/v1/music/stream/${s.saavnId}${opts.quality ? `?quality=${opts.quality}` : ''}`,
+      // Absolute CDN URLs, all qualities, so the downloader never needs Render
+      downloadUrlsPreview: downloads.map((d) => ({ quality: d.quality, bitrate: d.bitrate, url: d.url, format: d.format })),
       requiresAuth: true,
       canDownload: true,
     },
@@ -343,9 +346,16 @@ async function getAlbum(id, { page = 0 } = {}) {
   return { ...value, stale: Boolean(stale) };
 }
 
-async function getArtist(id, { page = 0 } = {}) {
-  const { value, stale } = await cache.swr('artist', { id, page }, env.CACHE_TTL_ENTITY, async () => {
-    const { data, upstream } = await saavn.artistById(id, page);
+async function resolveAlbumLink(link) {
+  const { data, upstream } = await saavn.albumByLink(link);
+  const album = Array.isArray(data.data) ? data.data[0] : data.data;
+  if (!album || !album.id) throw AppError.notFound('Album not found or link invalid');
+  return { id: String(album.id), upstream };
+}
+
+async function getArtist(id, { page = 0, songCount = 50, albumCount = 50 } = {}) {
+  const { value, stale } = await cache.swr('artist', { id, page, songCount, albumCount }, env.CACHE_TTL_ENTITY, async () => {
+    const { data, upstream } = await saavn.artistById(id, page, songCount, albumCount);
     const artist = data.data;
     const pool = [...(artist?.topSongs || []), ...(artist?.singles || []), ...(artist?.topAlbums || []).flatMap((a) => a.songs || [])];
     if (pool.length) await persistSongs(pool);
@@ -450,6 +460,7 @@ module.exports = {
   getSong,
   getSongs,
   getAlbum,
+  resolveAlbumLink,
   getArtist,
   getPlaylist,
   getLyrics,

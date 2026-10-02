@@ -74,7 +74,11 @@ export const music = {
   lyrics: (id: string) => apiClient<any>(`/music/songs/${id}/lyrics`),
   similar: (id: string) => apiClient<any>(`/music/songs/${id}/similar`),
   album: (id: string) => apiClient<any>(`/music/albums/${id}`),
-  artist: (id: string) => apiClient<any>(`/music/artists/${id}`),
+  resolveAlbumLink: (link: string) => apiClient<any>(`/music/albums/resolve?link=${encodeURIComponent(link)}`),
+  artist: (id: string, params?: { page?: number; songCount?: number; albumCount?: number }) => {
+    const qs = params ? new URLSearchParams(params as any).toString() : '';
+    return apiClient<any>(`/music/artists/${id}${qs ? `?${qs}` : ''}`);
+  },
   editorialPlaylist: (id: string, limit: number = 100) => apiClient<any>(`/music/editorial/playlists/${id}?limit=${limit}`),
   modules: (languages?: string) => apiClient<any>(`/music/modules${languages ? `?languages=${languages}` : ''}`),
   trending: (language?: string) => apiClient<any>(`/music/trending${language ? `?language=${language}` : ''}`),

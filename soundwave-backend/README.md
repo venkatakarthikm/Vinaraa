@@ -95,10 +95,9 @@ GET /api/v1                     machine-readable route map
 
 ### Auth (`/auth`)
 ```
-POST   /register                email+password+device → access + refresh pair
+POST   /register                email+password+device → access token (never expires)
 POST   /login
-POST   /refresh                 ROTATING refresh; reuse is detected and kills the token family
-POST   /logout                  revoke one token
+POST   /logout                  client-side only clear
 POST   /logout-all              revoke everything (bumps tokenVersion)
 POST   /change-password         verifies current password, revokes all sessions
 POST   /forgot-password         neutral response (no account enumeration)
@@ -277,8 +276,7 @@ postman/  SoundWave.postman_collection.json   (every route, with test scripts th
 
 ## Security
 
-- **Refresh-token rotation with reuse detection** — tokens are stored only as SHA-256 hashes; replaying a
-  rotated token revokes the whole family (verified in the smoke test).
+- **Tokens never expire; revoke everyone by changing your password.** There are no refresh tokens; a single JWT access token is used, and it is validated against the user's `tokenVersion`.
 - bcrypt password hashing (configurable rounds), account lockout after 8 failed logins.
 - `tokenVersion` invalidates every issued access token on password change / logout-all.
 - `helmet`, CORS allow-list, `hpp` parameter-pollution guard, per-user/per-IP rate limits on global,

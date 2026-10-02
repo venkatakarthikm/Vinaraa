@@ -1,16 +1,12 @@
 import { create } from 'zustand';
 
 interface UIState {
-  activeTab: 'home' | 'search' | 'library' | 'stats';
-  setActiveTab: (tab: 'home' | 'search' | 'library' | 'stats') => void;
   toasts: { id: string; message: string; type: 'info' | 'success' | 'error' }[];
   addToast: (message: string, type?: 'info' | 'success' | 'error') => void;
   removeToast: (id: string) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
-  activeTab: 'home',
-  setActiveTab: (tab) => set({ activeTab: tab }),
   toasts: [],
   addToast: (message, type = 'info') => {
     const id = Math.random().toString(36).slice(2);

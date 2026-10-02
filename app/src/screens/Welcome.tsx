@@ -1,27 +1,33 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { pageTransitionVariants } from '@/motion';
-import { Music2, Mic2, Headphones, Play } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { pageTransitionVariants, fadeVariants } from '@/motion';
+import { Headphones, Music2, Mic2, ArrowRight } from 'lucide-react';
 
 const slides = [
   {
-    headline: 'Indian cinema, your soundtrack.',
-    accent: 'cinema',
-    icon: <Headphones size={64} className="text-primary-soft" />,
-    sub: 'Stream every Bollywood, Kollywood and Tollywood hit.',
+    headline: ['Indian cinema,', 'your soundtrack.'],
+    icon: Headphones,
+    iconColor: '#B57BFF',
+    iconBg:    'rgba(139,61,255,0.15)',
+    sub: 'Stream every Bollywood, Kollywood and Tollywood hit — all in one place.',
+    accent: '#8B3DFF',
   },
   {
-    headline: 'Personalised to your taste.',
-    accent: 'Personalised',
-    icon: <Music2 size={64} className="text-mint" />,
-    sub: 'The more you listen, the smarter Vinaraa gets.',
+    headline: ['Personalised', 'to your taste.'],
+    icon: Music2,
+    iconColor: '#2DE1B5',
+    iconBg:    'rgba(45,225,181,0.12)',
+    sub: 'The more you listen, the smarter Vinaraa gets at finding what you love.',
+    accent: '#2DE1B5',
   },
   {
-    headline: 'Follow your favourite singers.',
-    accent: 'favourite',
-    icon: <Mic2 size={64} className="text-accent" />,
-    sub: 'From Arijit to AR Rahman — curated recommendations.',
+    headline: ['Your favourite', 'singers, curated.'],
+    icon: Mic2,
+    iconColor: '#FF3D8E',
+    iconBg:    'rgba(255,61,142,0.12)',
+    sub: 'From Arijit to AR Rahman — handpicked recommendations just for you.',
+    accent: '#FF3D8E',
   },
 ];
 
@@ -29,68 +35,115 @@ export default function Welcome() {
   const [idx, setIdx] = useState(0);
   const navigate = useNavigate();
   const slide = slides[idx];
+  const Icon = slide.icon;
+  const isLast = idx === slides.length - 1;
 
   return (
     <motion.div
-      className="flex flex-col h-full bg-bg"
+      className="flex flex-col h-full"
+      style={{ background: 'var(--color-bg)' }}
       initial="initial"
       animate="animate"
       exit="exit"
       variants={pageTransitionVariants}
     >
-      {/* Progress dots */}
-      <div className="flex gap-2 justify-center pt-16 pb-8">
+      {/* Aurora glow background */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{ background: `radial-gradient(ellipse 80% 50% at 50% 0%, ${slide.accent}22, transparent 70%)`, transition: 'background 0.6s ease' }}
+      />
+
+      {/* Skip */}
+      <div className="flex justify-end px-5" style={{ paddingTop: `calc(env(safe-area-inset-top) + 16px)` }}>
+        <button
+          onClick={() => navigate('/register')}
+          className="text-xs font-semibold px-3 py-1.5 rounded-pill"
+          style={{ color: 'var(--color-muted)', background: 'rgba(255,255,255,0.06)' }}
+        >
+          Skip
+        </button>
+      </div>
+
+      {/* Slide dots */}
+      <div className="flex gap-1.5 justify-center mt-6">
         {slides.map((_, i) => (
-          <div
+          <motion.div
             key={i}
-            className={`h-1 rounded-pill transition-all duration-300 ${i === idx ? 'w-8 bg-primary' : 'w-4 bg-surface-2'}`}
+            animate={{ width: i === idx ? 28 : 8, background: i === idx ? slide.accent : 'rgba(154,152,189,0.3)' }}
+            transition={{ duration: 0.3 }}
+            className="h-1.5 rounded-pill"
           />
         ))}
       </div>
 
       {/* Content */}
       <div className="flex-1 flex flex-col items-center justify-center px-8 text-center">
-        <motion.div
-          key={idx}
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -20 }}
-          transition={{ duration: 0.3 }}
-          className="flex flex-col items-center"
-        >
-          <div className="bg-surface-2 rounded-full p-8 mb-8 border border-border">
-            {slide.icon}
-          </div>
-          <h1 className="text-3xl font-bold text-text mb-4 leading-tight">
-            {slide.headline}
-          </h1>
-          <p className="text-muted text-base leading-relaxed">{slide.sub}</p>
-        </motion.div>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={idx}
+            variants={fadeVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="flex flex-col items-center"
+          >
+            {/* Icon */}
+            <motion.div
+              className="w-28 h-28 rounded-3xl flex items-center justify-center mb-8"
+              style={{ background: slide.iconBg, border: `1px solid ${slide.accent}33` }}
+              initial={{ scale: 0.7, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: 'spring', stiffness: 260, damping: 22, delay: 0.05 }}
+            >
+              <Icon size={52} style={{ color: slide.iconColor }} />
+            </motion.div>
+
+            {/* Headline */}
+            <h1 className="text-4xl font-black leading-tight mb-4" style={{ color: 'var(--color-text)' }}>
+              {slide.headline[0]}<br />
+              <span style={{ color: slide.accent }}>{slide.headline[1]}</span>
+            </h1>
+
+            {/* Sub */}
+            <p className="text-sm leading-relaxed max-w-xs" style={{ color: 'var(--color-muted)' }}>{slide.sub}</p>
+          </motion.div>
+        </AnimatePresence>
       </div>
 
       {/* Controls */}
-      <div className="px-6 pb-12 flex flex-col gap-3">
-        {idx < slides.length - 1 ? (
-          <button
+      <div className="px-6 pb-10 flex flex-col gap-3">
+        {!isLast ? (
+          <motion.button
+            whileTap={{ scale: 0.97 }}
             onClick={() => setIdx((i) => i + 1)}
-            className="w-full bg-gradient-to-r from-primary to-primary-soft text-white font-bold py-4 rounded-pill shadow-colored flex items-center justify-center gap-2"
+            className="w-full text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 text-base"
+            style={{
+              background: `linear-gradient(135deg, ${slide.accent}, ${slide.accent}99)`,
+              boxShadow: `0 10px 32px ${slide.accent}44`,
+            }}
           >
-            Next
-          </button>
+            Next <ArrowRight size={18} />
+          </motion.button>
         ) : (
-          <button
+          <motion.button
+            whileTap={{ scale: 0.97 }}
             onClick={() => navigate('/register')}
-            className="w-full bg-gradient-to-r from-primary to-primary-soft text-white font-bold py-4 rounded-pill shadow-colored flex items-center justify-center gap-2"
+            className="w-full text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 text-base"
+            style={{
+              background: 'linear-gradient(135deg, var(--color-primary), var(--color-accent))',
+              boxShadow: '0 10px 32px rgba(139,61,255,0.4)',
+            }}
           >
-            <Play size={20} fill="white" />
-            Let's Get Started
-          </button>
+            Let's Get Started <ArrowRight size={18} />
+          </motion.button>
         )}
         <button
           onClick={() => navigate('/login')}
-          className="text-muted text-sm text-center py-2"
+          className="text-sm text-center py-2"
+          style={{ color: 'var(--color-muted)' }}
         >
-          Already have an account? <span className="text-primary-soft font-semibold">Sign In</span>
+          Already have an account?{' '}
+          <span className="font-bold" style={{ color: 'var(--color-primary-soft)' }}>Sign In</span>
         </button>
       </div>
     </motion.div>

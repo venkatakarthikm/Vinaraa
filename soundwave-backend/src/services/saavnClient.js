@@ -133,7 +133,9 @@ async function songsByIds(ids = []) {
 }
 
 const albumById = (id) => request(`/albums${qs({ id })}`);
-const artistById = (id, page = 0) => request(`/artists${qs({ id, page })}`);
+const albumByLink = (link) => request(`/albums${qs({ link })}`);
+
+const artistById = (id, page = 0, songCount = 50, albumCount = 50) => request(`/artists${qs({ id, page, songCount, albumCount })}`);
 const playlistById = (id, limit = 100) => request(`/playlists${qs({ id, limit })}`);
 const songLyrics = (id) => request(`/songs/${encodeURIComponent(id)}/lyrics`);
 const modules = (language) => request(`/modules${qs({ language })}`);
@@ -160,6 +162,7 @@ module.exports = {
   songsById,
   songsByIds,
   albumById,
+  albumByLink,
   artistById,
   playlistById,
   songLyrics,

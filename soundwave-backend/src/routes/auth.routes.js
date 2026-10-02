@@ -9,7 +9,7 @@ const { validate } = require('../middleware/validate');
 const { authLimiter } = require('../middleware/rateLimit');
 const authService = require('../services/authService');
 const tokenService = require('../services/tokenService');
-const RefreshToken = require('../models/RefreshToken');
+
 const User = require('../models/User');
 
 const router = express.Router();
@@ -31,32 +31,10 @@ router.post(
   })
 );
 
-/** Refresh access token using a valid refresh token. */
-router.post(
-  '/refresh',
-  authLimiter,
-  asyncHandler(async (req, res) => {
-    const { refreshToken } = req.body;
-    const result = await tokenService.rotate(refreshToken, {
-      ip: req.ip,
-      userAgent: req.headers['user-agent'],
-    });
-    return ok(res, result);
-  })
-);
-
-/** Revoke the current refresh token (single-device logout). */
+/** Logout (client-side only now). */
 router.post(
   '/logout',
   asyncHandler(async (req, res) => {
-    const { refreshToken } = req.body || {};
-    if (refreshToken) {
-      const hash = crypto.createHash('sha256').update(refreshToken).digest('hex');
-      await RefreshToken.updateOne(
-        { tokenHash: hash, revokedAt: null },
-        { revokedAt: new Date(), revokedReason: 'logout' }
-      );
-    }
     return ok(res, { loggedOut: true });
   })
 );
@@ -65,7 +43,12 @@ router.post(
 router.post(
   '/logout-all',
   authenticate,
-  asyncHandler(async (req, res) => ok(res, await authService.logout({ userId: req.user._id, allDevices: true })))
+  asyncHandler(async (req, res) => {
+    const user = await User.findById(req.user._id);
+    user.security.tokenVersion = (user.security.tokenVersion || 0) + 1;
+    await user.save();
+    return ok(res, { loggedOutAll: true });
+  })
 );
 
 router.post(
@@ -96,12 +79,11 @@ router.get(
   asyncHandler(async (req, res) => ok(res, await authService.sessions(req.user._id)))
 );
 
-/** Revokes one device: refresh tokens plus the device record. */
+/** Revokes one device: only pulls the device record. */
 router.delete(
   '/sessions/:deviceId',
   authenticate,
   asyncHandler(async (req, res) => {
-    await tokenService.revokeDevice(req.user._id, req.params.deviceId);
     await User.updateOne({ _id: req.user._id }, { $pull: { devices: { deviceId: req.params.deviceId } } });
     return ok(res, { revoked: req.params.deviceId });
   })
