@@ -1,199 +1,213 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { Play, Shuffle, Share2, Check, Sparkles, Mic2 } from 'lucide-react';
 import { music } from '@/api/endpoints';
-import { ChevronLeft, Play, Mic2 } from 'lucide-react';
-import { usePlayerStore } from '@/store/player';
-import { SongRowSkeleton } from '@/components/Skeleton';
+import Page from '@/components/Page';
+import SongRow from '@/components/SongRow';
+import { MediaCard } from '@/components/MediaCard';
+import { ControlStrip } from '@/components/ControlStrip';
+import { Skeleton, SongRowSkeleton } from '@/components/Skeleton';
 import { formatPlayerSong } from '@/utils/song';
-import { getSongImage } from '@/utils/image';
-import { listStaggerVariants } from '@/motion';
+import { usePlayerStore } from '@/store/player';
+import { useUIStore } from '@/store/ui';
+import Button from '@/components/Button';
 
 export default function Artist() {
   const { id } = useParams<{ id: string }>();
-  const [artist, setArtist] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(0);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(false);
   const navigate = useNavigate();
   const setQueue = usePlayerStore((s) => s.setQueue);
+  const addToast = useUIStore((s) => s.addToast);
+
+  const [artist, setArtist] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+  const [isFollowing, setIsFollowing] = useState(false);
 
   useEffect(() => {
     if (!id) return;
-    setArtist(null);
-    setPage(0);
-    setHasMore(false);
     setLoading(true);
-    music.artist(id, { page: 0, songCount: 50, albumCount: 50 })
-      .then((d) => { setArtist(d); setHasMore((d?.upstreamTopSongs?.length || 0) === 50); setLoading(false); })
-      .catch(() => setLoading(false));
+    setNotFound(false);
+
+    const localFollow = localStorage.getItem(`following:${id}`);
+    setIsFollowing(localFollow === 'true');
+
+    music.artist(id)
+      .then((d) => {
+        if (d) setArtist(d);
+        else setNotFound(true);
+      })
+      .catch(() => setNotFound(true))
+      .finally(() => setLoading(false));
   }, [id]);
 
-  useEffect(() => {
-    if (!id || page === 0) return;
-    setLoadingMore(true);
-    music.artist(id, { page, songCount: 50, albumCount: 50 }).then(d => {
-      setArtist((prev: any) => {
-        if (!prev) {
-          setHasMore((d?.upstreamTopSongs?.length || 0) > 0);
-          return d;
-        }
-        // Merge songs
-        const currentSongs = [...(prev.upstreamTopSongs || [])];
-        const newSongs = d.upstreamTopSongs || [];
-        const existingIds = new Set(currentSongs.map(s => s.id));
-        const filteredNew = newSongs.filter((s: any) => !existingIds.has(s.id));
-        
-        setHasMore(newSongs.length > 0 && filteredNew.length > 0);
-        return {
-          ...prev,
-          upstreamTopSongs: [...currentSongs, ...filteredNew]
-        };
-      });
-      setLoadingMore(false);
-    }).catch(() => setLoadingMore(false));
-  }, [page, id]);
-
-  const allSongs = [...(artist?.topSongs || []), ...(artist?.upstreamTopSongs || [])].filter(
-    (s, idx, self) => self.findIndex((x: any) => x.id === s.id) === idx
-  );
-
-  const handlePlay = (idx = 0) => {
-    if (!allSongs.length) return;
-    setQueue(allSongs.map((s: any) => formatPlayerSong(s)), idx);
+  const toggleFollow = () => {
+    if (!id) return;
+    const next = !isFollowing;
+    setIsFollowing(next);
+    localStorage.setItem(`following:${id}`, String(next));
+    addToast(next ? 'Following artist' : 'Unfollowed artist', 'info');
   };
 
+  const topSongs = (artist?.upstreamTopSongs || artist?.songs || []).map(formatPlayerSong);
+
+  const handlePlay = (startIndex = 0) => {
+    if (topSongs.length) {
+      setQueue(topSongs, startIndex);
+      navigate('/player');
+    }
+  };
+
+  const handleShare = () => {
+    if (navigator.share) {
+      navigator.share({
+        title: artist?.name,
+        text: `${artist?.name} on Vinaraa`,
+        url: window.location.href,
+      }).catch(() => {});
+    } else {
+      addToast('Copied link', 'info');
+    }
+  };
+
+  if (notFound) {
+    return (
+      <Page>
+        <div className="py-20 flex flex-col items-center text-center px-5 gap-3">
+          <div className="w-[72px] h-[72px] rounded-full bg-surface-2 flex items-center justify-center text-muted">
+            <Mic2 size={32} />
+          </div>
+          <h1 className="t-h1 text-[28px] font-bold text-text">Artist not found</h1>
+          <p className="t-cap text-[13px] text-muted">We couldn't find that artist.</p>
+          <Button size="sm" onClick={() => navigate(-1)} className="mt-2">
+            Go back
+          </Button>
+        </div>
+      </Page>
+    );
+  }
+
   return (
-    <div className="flex flex-col h-full" style={{ background: 'var(--color-bg)' }}>
-      <div className="flex-1 overflow-y-auto scroll-y pb-safe">
-
-        {/* Hero — tall bleed image */}
-        <div className="relative" style={{ height: 320 }}>
-          {loading ? (
-            <div className="absolute inset-0 shimmer" />
-          ) : artist?.image ? (
-            <img src={artist.image} alt={artist.name} className="absolute inset-0 w-full h-full object-cover" />
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center"
-              style={{ background: 'linear-gradient(135deg, rgba(139,61,255,0.2), rgba(255,61,142,0.15))' }}>
-              <Mic2 size={72} style={{ color: 'var(--color-primary-soft)' }} />
-            </div>
-          )}
-          {/* Deep gradient scrim */}
-          <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.5) 50%, #090714 100%)' }} />
-
-          {/* Back button */}
-          <button
-            onClick={() => navigate(-1)}
-            className="absolute left-4 z-20 p-2.5 rounded-full"
-            style={{ top: `calc(env(safe-area-inset-top) + 12px)`, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(8px)' }}
-            aria-label="Back"
-          >
-            <ChevronLeft size={22} color="white" />
-          </button>
-
-          {/* Name + stats overlay */}
-          {!loading && (
-            <div className="absolute bottom-5 left-5 right-5">
-              <h1 className="text-4xl font-black text-white drop-shadow-xl leading-tight mb-1">{artist?.name}</h1>
-              {artist?.followerCount > 0 && (
-                <p className="text-white/60 text-sm font-medium">{artist.followerCount.toLocaleString()} listeners</p>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Action bar */}
-        <div className="flex gap-3 px-5 py-4">
-          <motion.button
-            whileTap={{ scale: 0.97 }}
-            onClick={() => handlePlay(0)}
-            disabled={loading}
-            className="flex-1 text-white font-bold rounded-2xl py-3.5 flex items-center justify-center gap-2"
-            style={{ background: 'linear-gradient(135deg, var(--color-primary), var(--color-accent))', boxShadow: '0 8px 24px rgba(139,61,255,0.35)' }}
-          >
-            <Play size={18} fill="white" />Play
-          </motion.button>
-          <button
-            className="px-5 py-3.5 rounded-2xl font-bold text-sm"
-            style={{ background: 'var(--color-surface-2)', color: 'var(--color-muted)', border: '1px solid rgba(40,36,77,0.6)' }}
-          >
-            Follow
-          </button>
-        </div>
-
-        {/* Popular Songs */}
-        <div className="px-4 mb-6">
-          <p className="text-xs font-bold uppercase tracking-wider px-1 mb-2" style={{ color: 'var(--color-muted)' }}>Popular Songs</p>
-          {loading
-            ? Array.from({ length: 6 }).map((_, i) => <SongRowSkeleton key={i} />)
-            : allSongs.map((song: any, i: number) => (
-                <motion.button
-                  key={song.id || song.saavnId}
-                  custom={i}
-                  variants={listStaggerVariants}
-                  initial="initial"
-                  animate="animate"
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => handlePlay(i)}
-                  className="flex items-center gap-3 py-3 w-full rounded-xl hover:bg-white/5 px-2"
-                >
-                  <span className="w-5 text-xs text-right flex-shrink-0 font-bold" style={{ color: 'var(--color-muted)' }}>{i + 1}</span>
-                  <div className="w-12 h-12 rounded-xl overflow-hidden flex-shrink-0" style={{ background: 'var(--color-surface-2)' }}>
-                    {getSongImage(song) && <img src={getSongImage(song)} alt={song.name} className="w-full h-full object-cover" />}
-                  </div>
-                  <div className="flex-1 min-w-0 text-left">
-                    <p className="text-sm font-semibold line-clamp-1" style={{ color: 'var(--color-text)' }}>{song.name}</p>
-                    <p className="text-xs mt-0.5 line-clamp-1" style={{ color: 'var(--color-muted)' }}>{song.album?.name || ''}</p>
-                  </div>
-                </motion.button>
-              ))
-          }
-          {!loading && hasMore && (
-            <motion.button
-              whileTap={{ scale: 0.97 }}
-              onClick={() => setPage(p => p + 1)}
-              disabled={loadingMore}
-              className="w-full mt-2 py-3.5 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all"
-              style={{ background: loadingMore ? 'rgba(255,255,255,0.05)' : 'var(--color-surface-2)', color: 'var(--color-text)' }}
+    <Page>
+      <div className="flex flex-col gap-6 pb-[120px]">
+        <ControlStrip>
+          <div className="flex items-center justify-between w-full">
+            <button
+              onClick={() => handlePlay(0)}
+              className="h-[40px] px-5 rounded-full bg-primary text-on-primary flex items-center gap-2 t-cap text-[13px] font-bold shadow-md active:scale-95 transition-transform"
             >
-              {loadingMore ? (
-                <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-              ) : 'Load More'}
-            </motion.button>
-          )}
-        </div>
+              <Play size={18} fill="currentColor" />
+              <span>Play</span>
+            </button>
 
-        {/* Albums rail */}
-        {!loading && artist?.albums?.length > 0 && (
-          <div className="mb-4">
-            <p className="text-xs font-bold uppercase tracking-wider px-5 mb-3" style={{ color: 'var(--color-muted)' }}>Albums</p>
-            <div className="flex gap-4 px-5 overflow-x-auto scroll-x pb-4">
-              {artist.albums.map((alb: any, i: number) => (
-                <motion.button
-                  key={alb.id}
-                  custom={i}
-                  variants={listStaggerVariants}
-                  initial="initial"
-                  animate="animate"
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => navigate(`/album/${alb.id}`)}
-                  className="flex-shrink-0 w-36 text-left"
-                >
-                  <div className="w-36 h-36 rounded-2xl overflow-hidden mb-2" style={{ background: 'var(--color-surface-2)' }}>
-                    {alb.image && <img src={alb.image} alt={alb.name} className="w-full h-full object-cover" />}
-                  </div>
-                  <p className="text-sm font-semibold line-clamp-1" style={{ color: 'var(--color-text)' }}>{alb.name}</p>
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted)' }}>{alb.year}</p>
-                </motion.button>
-              ))}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handlePlay(Math.floor(Math.random() * topSongs.length))}
+                className="w-10 h-10 rounded-full bg-surface-2 flex items-center justify-center text-text"
+                aria-label="Shuffle"
+              >
+                <Shuffle size={18} />
+              </button>
+
+              <button
+                onClick={toggleFollow}
+                className={`h-[40px] px-4 rounded-full flex items-center gap-1.5 t-cap text-[13px] font-bold transition-all ${
+                  isFollowing
+                    ? 'bg-surface-2 text-primary border border-line'
+                    : 'bg-surface-2 text-text border border-line'
+                }`}
+              >
+                {isFollowing ? <Check size={16} /> : null}
+                <span>{isFollowing ? 'Following' : 'Follow'}</span>
+              </button>
+
+              <button
+                onClick={handleShare}
+                className="w-10 h-10 rounded-full bg-surface-2 flex items-center justify-center text-text"
+                aria-label="Share"
+              >
+                <Share2 size={18} />
+              </button>
             </div>
           </div>
-        )}
+        </ControlStrip>
 
-        <div className="h-6" />
+        <div className="relative w-full h-[300px] overflow-hidden bg-surface-2">
+          {loading ? (
+            <Skeleton width="100%" height={300} />
+          ) : (
+            <>
+              {artist?.image && (
+                <img
+                  src={artist.image}
+                  alt={artist.name}
+                  className="w-full h-full object-cover object-[center_25%]"
+                />
+              )}
+              <div className="absolute inset-0 bg-gradient-to-b from-black/35 via-transparent to-bg" />
+
+              <div className="absolute bottom-4 left-5 right-5 flex flex-col">
+                {artist?.matchPercent && (
+                  <div className="flex items-center gap-1 text-primary t-micro text-[11px] font-bold mb-1">
+                    <Sparkles size={12} />
+                    <span>{artist.matchPercent}% match</span>
+                  </div>
+                )}
+                <h1 className="t-display text-[36px] leading-[44px] font-extrabold text-white drop-shadow-md">
+                  {artist?.name}
+                </h1>
+                {artist?.followerCount && (
+                  <p className="t-cap text-[13px] text-white/70">
+                    {artist.followerCount} followers
+                  </p>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+
+        <section className="flex flex-col gap-2 px-2">
+          <div className="flex items-center justify-between px-3">
+            <h2 className="t-h2 text-[20px] font-bold text-text">Popular songs</h2>
+          </div>
+
+          {loading ? (
+            <div className="flex flex-col gap-2">
+              {[1, 2, 3, 4, 5].map((n) => (
+                <SongRowSkeleton key={n} />
+              ))}
+            </div>
+          ) : (
+            topSongs.slice(0, 5).map((song: any, idx: number) => (
+              <SongRow
+                key={song.id}
+                song={song}
+                index={idx}
+                showIndex
+                onPlay={() => handlePlay(idx)}
+              />
+            ))
+          )}
+        </section>
+
+        {!loading && artist?.albums?.length > 0 && (
+          <section className="flex flex-col gap-3 px-5">
+            <h2 className="t-h2 text-[20px] font-bold text-text">Albums</h2>
+            <div className="flex gap-3 overflow-x-auto no-scrollbar">
+              {artist.albums.map((album: any) => (
+                <MediaCard
+                  key={album.id}
+                  id={album.id}
+                  title={album.name}
+                  subtitle={album.year}
+                  image={album.image}
+                  type="album"
+                  onClick={() => navigate(`/album/${album.id}`)}
+                />
+              ))}
+            </div>
+          </section>
+        )}
       </div>
-    </div>
+    </Page>
   );
 }
