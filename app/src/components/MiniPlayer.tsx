@@ -63,7 +63,7 @@ export default function MiniPlayer() {
           transition={springs.snappy}
           onClick={() => navigate('/player')}
           className="fixed right-4 z-40 w-[58px] h-[58px] cursor-grab active:cursor-grabbing select-none"
-          style={{ bottom: 'calc(var(--sab) + 64px + 12px)' }}
+          style={{ bottom: 'calc(var(--sab) + 64px + 72px)' }}
         >
           <div className="relative w-full h-full rounded-full bg-[#0B0B0D] border-[2px] border-line shadow-2xl flex items-center justify-center overflow-hidden">
             {/* Rotating Vinyl/Cover */}
@@ -128,7 +128,7 @@ export default function MiniPlayer() {
           key="full-bar"
           initial={{ y: 80, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          exit={{ y: 80, opacity: 0 }}
+          exit={{ y: 0, opacity: 1 }}
           transition={springs.sheet}
           onClick={() => navigate('/player')}
           className="fixed left-[12px] right-[12px] z-30 h-[56px] rounded-[20px] bg-surface/92 backdrop-blur-md border border-line shadow-lg overflow-hidden cursor-pointer"

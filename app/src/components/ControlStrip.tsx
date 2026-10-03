@@ -37,9 +37,9 @@ export function ControlStripSlot() {
 
   return (
     <div
-      className="fixed left-[12px] right-[12px] z-20 h-[48px] rounded-[24px] bg-surface border border-line surface-glass flex items-center px-2 shadow-lg transition-all duration-200"
+      className="fixed left-[12px] right-[12px] z-20 h-[52px] rounded-[26px] bg-surface/95 border border-line surface-glass flex items-center px-2 shadow-xl transition-all duration-200"
       style={{
-        bottom: 'calc(var(--sab) + 8px + 64px + 8px + (var(--has-mini) * 64px))',
+        bottom: 'calc(var(--sab) + 64px + 12px)',
       }}
     >
       <div className="w-full flex items-center justify-between gap-2 px-1">

@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { music, users } from '@/api/endpoints';
 import { Search as SearchIcon, X, SlidersHorizontal, Clock, ArrowUpLeft, CircleAlert } from 'lucide-react';
 import { usePlayerStore } from '@/store/player';
+import { useSearchStore } from '@/store/search';
 import { formatPlayerSong } from '@/utils/song';
 import Page from '@/components/Page';
 import SongRow from '@/components/SongRow';
@@ -28,17 +29,17 @@ export default function Search() {
   const navigate = useNavigate();
   const setQueue = usePlayerStore((s) => s.setQueue);
 
-  const [query, setQuery] = useState('');
+  // Search Store (Persists search query & results across screen navigations)
+  const { query, setQuery, selectedLanguage, setSelectedLanguage, results, setResults } = useSearchStore();
+
   const [activeType, setActiveType] = useState<SearchType>('all');
   const [history, setHistory] = useState<any[]>([]);
   const [trending, setTrending] = useState<any[]>([]);
   const [suggestions, setSuggestions] = useState<any[]>([]);
-  const [results, setResults] = useState<any>(null);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [selectedLanguage, setSelectedLanguage] = useState<string>('All');
 
   const inputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -86,7 +87,7 @@ export default function Search() {
     }, 250);
 
     return () => clearTimeout(timer);
-  }, [query, activeType, selectedLanguage]);
+  }, [query, activeType, selectedLanguage, setResults]);
 
   const handleClearHistory = () => {
     users.clearSearchHistory().then(() => setHistory([])).catch(() => {});
@@ -109,7 +110,7 @@ export default function Search() {
 
   return (
     <Page title="Search" isTabRoot>
-      <div className="flex flex-col gap-6 px-5 pt-2 pb-[120px]">
+      <div className="flex flex-col gap-6 px-5 pt-2 pb-[140px]">
         {/* Type Filter Chips (Docked directly above search field via ControlStrip slot) */}
         <ControlStrip>
           <div className="flex items-center justify-between w-full">
@@ -371,7 +372,10 @@ export default function Search() {
         />
         {query && (
           <button
-            onClick={() => setQuery('')}
+            onClick={() => {
+              setQuery('');
+              setResults(null);
+            }}
             className="w-10 h-10 rounded-full flex items-center justify-center text-muted hover:text-text"
             aria-label="Clear search field"
           >

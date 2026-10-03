@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { stats } from '@/api/endpoints';
 import {
   Share2, Sparkles, ChartColumn, CircleAlert, Languages, Mic2, Music2,
-  PersonStanding, Film, Disc3, Clock, CheckCircle2, XCircle
+  PersonStanding, Film, Disc3, Clock, CheckCircle2, XCircle, Flame,
+  PieChart, Activity, Heart, ListMusic, Play
 } from 'lucide-react';
 import Page from '@/components/Page';
 import Chip from '@/components/Chip';
@@ -52,7 +53,7 @@ export default function Stats() {
   const [range, setRange] = useState('30d');
 
   // Analytics Query
-  const { data: dashboard, isLoading: loadingDash, isError: errorDash, refetch: refetchDash } = useQuery({
+  const { data: dashboardRes, isLoading: loadingDash, isError: errorDash, refetch: refetchDash } = useQuery({
     queryKey: ['stats', 'dashboard', range],
     queryFn: () => stats.dashboard(range),
     staleTime: 2 * 60 * 1000,
@@ -92,9 +93,13 @@ export default function Stats() {
     }
   };
 
+  const dashboard = dashboardRes?.data || dashboardRes;
   const overview = dashboard?.overview;
+  const top = dashboard?.top || {};
+  const quality = dashboard?.quality || {};
+  const recentSongs = (dashboard?.recentlyPlayed || []).map(formatPlayerSong);
 
-  // Aggregate all history sessions into grouped sections
+  // Aggregate history
   const rawHistoryPages = historyData?.pages || [];
   const allSessions: any[] = rawHistoryPages.flatMap(
     (page) => page?.sessions || page?.items || page?.data || []
@@ -107,13 +112,13 @@ export default function Stats() {
     groupedHistory[key].push(sess);
   });
 
-  const TOP_SECTIONS = [
-    { key: 'languages', title: 'Languages', icon: Languages },
-    { key: 'singers', title: 'Top singers', icon: Mic2 },
-    { key: 'directors', title: 'Music directors', icon: Music2 },
-    { key: 'actors', title: 'Heroes & actors', icon: PersonStanding },
-    { key: 'movies', title: 'Movies', icon: Film },
-    { key: 'songs', title: 'Songs', icon: Disc3 },
+  const TOP_DIMENSIONS = [
+    { key: 'songs', title: 'Top songs', icon: Disc3, defaultType: 'song' },
+    { key: 'singers', title: 'Top singers', icon: Mic2, defaultType: 'artist' },
+    { key: 'directors', title: 'Music directors', icon: Music2, defaultType: 'artist' },
+    { key: 'actors', title: 'Heroes & actors', icon: PersonStanding, defaultType: 'artist' },
+    { key: 'movies', title: 'Top movies & albums', icon: Film, defaultType: 'album' },
+    { key: 'languages', title: 'Languages', icon: Languages, defaultType: 'language' },
   ];
 
   return (
@@ -130,7 +135,7 @@ export default function Stats() {
         </button>
       }
     >
-      <div className="flex flex-col gap-6 px-5 pt-2 pb-[120px]">
+      <div className="flex flex-col gap-6 px-5 pt-2 pb-[140px]">
         {/* Segmented Control (Analytics | History) */}
         <div className="h-[48px] bg-surface-2 p-1 rounded-[24px] flex items-center shadow-inner">
           <button
@@ -169,9 +174,9 @@ export default function Stats() {
 
             {loadingDash ? (
               <div className="flex flex-col gap-4">
-                <div className="h-[140px] rounded-[28px] bg-surface-2 animate-pulse" />
-                <div className="h-[96px] rounded-[28px] bg-surface-2 animate-pulse" />
                 <div className="h-[160px] rounded-[28px] bg-surface-2 animate-pulse" />
+                <div className="h-[120px] rounded-[28px] bg-surface-2 animate-pulse" />
+                <div className="h-[200px] rounded-[28px] bg-surface-2 animate-pulse" />
               </div>
             ) : errorDash ? (
               <div className="py-16 flex flex-col items-center text-center gap-3">
@@ -181,47 +186,120 @@ export default function Stats() {
                   Retry
                 </Button>
               </div>
-            ) : overview?.plays ? (
+            ) : overview?.plays || overview?.listeningTime?.ms ? (
               <div className="flex flex-col gap-6">
-                {/* Total Time Card */}
-                <div className="w-full bg-surface p-6 rounded-[28px] border border-line flex flex-col gap-4">
-                  <span className="t-cap text-[13px] text-muted">Time listened</span>
-                  <h1 className="t-display text-[40px] leading-[48px] font-extrabold text-primary">
-                    {overview.listeningTime?.text || '0h 0m'}
+                {/* HERO CARD: Time Listened & Streak */}
+                <div className="w-full bg-surface p-6 rounded-[28px] border border-line flex flex-col gap-5 shadow-lg relative overflow-hidden">
+                  <div className="flex items-center justify-between">
+                    <span className="t-cap text-[13px] text-muted font-medium">Time listened</span>
+                    {overview?.streak?.current > 0 && (
+                      <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 text-amber-500 t-micro font-bold border border-amber-500/30">
+                        <Flame size={14} fill="currentColor" />
+                        <span>{overview.streak.current} day streak</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <h1 className="t-display text-[42px] leading-[48px] font-extrabold text-primary tracking-tight">
+                    {overview.listeningTime?.text || '0m'}
                   </h1>
 
-                  <div className="grid grid-cols-3 gap-2 pt-4 border-t border-line">
+                  {/* Sub-grid metrics */}
+                  <div className="grid grid-cols-4 gap-2 pt-4 border-t border-line/50 text-center">
                     <div>
-                      <span className="t-h2 text-[20px] font-bold text-text block">
+                      <span className="t-h2 text-[18px] font-bold text-text block">
                         {overview.plays || 0}
                       </span>
-                      <span className="t-cap text-[12px] text-muted">Plays</span>
+                      <span className="t-cap text-[11px] text-muted">Plays</span>
                     </div>
                     <div>
-                      <span className="t-h2 text-[20px] font-bold text-text block">
-                        {overview.distinct?.songs || 0}
+                      <span className="t-h2 text-[18px] font-bold text-success block">
+                        {overview.completions || 0}
                       </span>
-                      <span className="t-cap text-[12px] text-muted">Songs</span>
+                      <span className="t-cap text-[11px] text-muted">Finished</span>
                     </div>
                     <div>
-                      <span className="t-h2 text-[20px] font-bold text-text block">
-                        {overview.activeDays || 1}
+                      <span className="t-h2 text-[18px] font-bold text-danger block">
+                        {overview.skips || 0}
                       </span>
-                      <span className="t-cap text-[12px] text-muted">Active days</span>
+                      <span className="t-cap text-[11px] text-muted">Skipped</span>
                     </div>
+                    <div>
+                      <span className="t-h2 text-[18px] font-bold text-accent block">
+                        {overview.seeks || 0}
+                      </span>
+                      <span className="t-cap text-[11px] text-muted">Seeks</span>
+                    </div>
+                  </div>
+
+                  {/* Distinct Counts Bar */}
+                  {overview.distinct && (
+                    <div className="bg-surface-2/80 p-3 rounded-[18px] flex items-center justify-around t-micro text-[12px] font-semibold text-muted">
+                      <span>🎵 {overview.distinct.songs || 0} songs</span>
+                      <span>🎤 {overview.distinct.artists || 0} artists</span>
+                      <span>💿 {overview.distinct.albums || 0} albums</span>
+                      <span>🌐 {overview.distinct.languages || 0} lang</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* BEHAVIOR & QUALITY CARD */}
+                <div className="w-full bg-surface p-5 rounded-[28px] border border-line flex flex-col gap-4 shadow-sm">
+                  <div className="flex items-center gap-2 text-text font-bold t-h3">
+                    <Activity size={20} className="text-primary" />
+                    <span>Listening behavior</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-surface-2 p-3.5 rounded-[20px] flex flex-col gap-1">
+                      <span className="t-micro text-[12px] text-muted">Completion rate</span>
+                      <span className="t-h2 text-[22px] font-extrabold text-success">
+                        {overview.completionRate ? `${overview.completionRate}%` : '0%'}
+                      </span>
+                    </div>
+                    <div className="bg-surface-2 p-3.5 rounded-[20px] flex flex-col gap-1">
+                      <span className="t-micro text-[12px] text-muted">Skip rate</span>
+                      <span className="t-h2 text-[22px] font-extrabold text-danger">
+                        {overview.skipRate ? `${overview.skipRate}%` : '0%'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Quality & Engagement */}
+                  {quality.engagementRatio !== undefined && (
+                    <div className="flex items-center justify-between text-muted t-micro font-semibold pt-1 border-t border-line/40">
+                      <span>Engagement: {quality.engagementRatio}%</span>
+                      <span>Avg seeks: {quality.averageSeeksPerSession || 0}/session</span>
+                    </div>
+                  )}
+
+                  {/* Lifetime & Library Summary */}
+                  <div className="flex items-center justify-between pt-2 text-muted t-cap text-[12.5px] font-medium border-t border-line/30">
+                    <span className="flex items-center gap-1">
+                      <PieChart size={14} />
+                      {overview.lifetime?.plays || 0} lifetime plays
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Heart size={14} className="text-heart" />
+                      {overview.library?.likedSongs || 0} liked
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <ListMusic size={14} />
+                      {overview.library?.playlists || 0} playlists
+                    </span>
                   </div>
                 </div>
 
-                {/* Insights Sentences */}
+                {/* INSIGHTS CAROUSEL */}
                 {dashboard?.insights?.sentences?.length > 0 && (
                   <div className="flex gap-3 overflow-x-auto no-scrollbar snap-x">
                     {dashboard.insights.sentences.map((sentence: string, idx: number) => (
                       <div
                         key={idx}
-                        className="min-w-[calc(100%-32px)] h-[96px] rounded-[28px] bg-surface p-5 border border-line flex items-center gap-3 flex-shrink-0 snap-center"
+                        className="min-w-[calc(100%-32px)] rounded-[24px] bg-surface p-4 border border-line flex items-center gap-3 flex-shrink-0 snap-center shadow-sm"
                       >
-                        <Sparkles size={22} className="text-primary flex-shrink-0" />
-                        <p className="t-body text-[14px] text-text font-medium leading-snug line-clamp-2">
+                        <Sparkles size={20} className="text-primary flex-shrink-0" />
+                        <p className="t-body text-[13.5px] text-text font-medium leading-snug line-clamp-2">
                           {sentence}
                         </p>
                       </div>
@@ -229,64 +307,122 @@ export default function Stats() {
                   </div>
                 )}
 
-                {/* Ranked Dimension Sections */}
-                {TOP_SECTIONS.map(({ key, title, icon: Icon }) => {
-                  const items = dashboard?.top?.[key] || [];
+                {/* TOP 6 RANKED DIMENSION SECTIONS */}
+                {TOP_DIMENSIONS.map(({ key, title, icon: Icon, defaultType }) => {
+                  const sectionData = top[key];
+                  const items = sectionData?.items || (Array.isArray(sectionData) ? sectionData : []);
+
                   if (!Array.isArray(items) || !items.length) return null;
 
                   return (
                     <section key={key} className="flex flex-col gap-3">
-                      <div className="flex items-center gap-2">
-                        <Icon size={20} className="text-primary" />
-                        <h2 className="t-h2 text-[18px] font-bold text-text">{title}</h2>
+                      <div className="flex items-center justify-between px-1">
+                        <div className="flex items-center gap-2">
+                          <Icon size={20} className="text-primary" />
+                          <h2 className="t-h2 text-[18px] font-bold text-text">{title}</h2>
+                        </div>
+                        {sectionData?.totalText && (
+                          <span className="t-cap text-[12px] text-muted font-semibold">
+                            {sectionData.totalText}
+                          </span>
+                        )}
                       </div>
 
-                      <div className="bg-surface rounded-[24px] border border-line p-2 divide-y divide-line/20">
+                      <div className="bg-surface rounded-[24px] border border-line p-2 divide-y divide-line/20 shadow-sm">
                         {items.slice(0, 10).map((it: any, i: number) => {
                           const img = getMediaImage(it);
                           const name = it.name || it.title || 'Unknown';
-                          const plays = it.playCount ?? it.count ?? it.plays ?? 0;
+                          const subtitle = it.subtitle || (it.artist ? it.artist : '');
+                          const plays = it.plays ?? it.playCount ?? it.count ?? 0;
                           const listenedText = it.listenedText || (it.listenedMs ? `${Math.round(it.listenedMs / 60000)}m` : '');
+                          const sharePercent = it.sharePercent ? `${it.sharePercent}%` : null;
 
                           return (
-                            <button
+                            <div
                               key={it.id || it.saavnId || i}
                               onClick={() => {
-                                if (it.id && (it.type === 'artist' || key === 'singers')) {
+                                if (key === 'songs' || defaultType === 'song') {
+                                  setQueue([formatPlayerSong(it)], 0);
+                                  navigate('/player');
+                                } else if (it.id && (defaultType === 'artist' || key === 'singers')) {
                                   navigate(`/artist/${it.id}`);
-                                } else if (it.id && (it.type === 'album' || key === 'movies')) {
+                                } else if (it.id && (defaultType === 'album' || key === 'movies')) {
                                   navigate(`/album/${it.id}`);
                                 }
                               }}
-                              className="w-full flex items-center gap-3.5 p-3 hover:bg-surface-2 rounded-[16px] text-left transition-colors"
+                              className="w-full flex flex-col p-3 hover:bg-surface-2 rounded-[18px] transition-colors cursor-pointer"
                             >
-                              <span className="w-5 t-num text-[14px] font-bold text-muted text-center flex-shrink-0">
-                                {i + 1}
-                              </span>
+                              <div className="flex items-center gap-3">
+                                <span className="w-5 t-num text-[14px] font-extrabold text-muted text-center flex-shrink-0">
+                                  {it.rank || i + 1}
+                                </span>
 
-                              <div className="w-11 h-11 rounded-[14px] overflow-hidden bg-surface-2 flex-shrink-0 flex items-center justify-center">
-                                {img ? (
-                                  <img src={img} alt={name} className="w-full h-full object-cover" />
-                                ) : (
-                                  <Icon size={20} className="text-muted" />
+                                <div className="w-11 h-11 rounded-[14px] overflow-hidden bg-surface-2 flex-shrink-0 flex items-center justify-center">
+                                  {img ? (
+                                    <img src={img} alt={name} className="w-full h-full object-cover" />
+                                  ) : (
+                                    <Icon size={20} className="text-muted" />
+                                  )}
+                                </div>
+
+                                <div className="flex-1 min-w-0">
+                                  <p className="t-h3 text-[14px] font-bold text-text truncate leading-tight">
+                                    {name}
+                                  </p>
+                                  <p className="t-cap text-[12px] text-muted truncate mt-0.5">
+                                    {subtitle ? `${subtitle} · ` : ''}{plays} plays {listenedText ? `(${listenedText})` : ''}
+                                  </p>
+                                </div>
+
+                                {key === 'songs' && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setQueue([formatPlayerSong(it)], 0);
+                                      navigate('/player');
+                                    }}
+                                    className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center flex-shrink-0 active:scale-95"
+                                  >
+                                    <Play size={16} fill="currentColor" className="ml-0.5" />
+                                  </button>
                                 )}
                               </div>
 
-                              <div className="flex-1 min-w-0">
-                                <p className="t-h3 text-[14px] font-bold text-text truncate leading-tight">
-                                  {name}
-                                </p>
-                                <p className="t-cap text-[12px] text-muted truncate mt-0.5">
-                                  {plays} plays {listenedText ? `· ${listenedText}` : ''}
-                                </p>
-                              </div>
-                            </button>
+                              {/* Share percent bar */}
+                              {sharePercent && (
+                                <div className="w-full h-[3px] bg-line/40 rounded-full overflow-hidden mt-2 ml-8">
+                                  <div
+                                    className="h-full bg-primary rounded-full transition-all duration-300"
+                                    style={{ width: sharePercent }}
+                                  />
+                                </div>
+                              )}
+                            </div>
                           );
                         })}
                       </div>
                     </section>
                   );
                 })}
+
+                {/* RECENTLY PLAYED RAIL */}
+                {recentSongs.length > 0 && (
+                  <section className="flex flex-col gap-2">
+                    <h2 className="t-h2 text-[18px] font-bold text-text px-1">Recently played</h2>
+                    <div className="flex flex-col divide-y divide-line/20 bg-surface rounded-[24px] border border-line overflow-hidden">
+                      {recentSongs.slice(0, 5).map((song: any, idx: number) => (
+                        <SongRow
+                          key={song.id || idx}
+                          song={song}
+                          onPlay={() => {
+                            setQueue(recentSongs, idx);
+                            navigate('/player');
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                )}
               </div>
             ) : (
               <div className="py-16 flex flex-col items-center text-center gap-3">
