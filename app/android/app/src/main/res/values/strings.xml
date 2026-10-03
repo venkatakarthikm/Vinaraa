@@ -4,4 +4,25 @@
     <string name="title_activity_main">Vinaraa</string>
     <string name="package_name">com.music.vinaraa</string>
     <string name="custom_url_scheme">com.music.vinaraa</string>
+
+    <string name="widget_now_label">Vinaraa Now</string>
+    <string name="widget_now_desc">Full now playing with playback controls.</string>
+
+    <string name="widget_deck_label">Vinaraa Deck</string>
+    <string name="widget_deck_desc">Square album art with quick play/pause.</string>
+
+    <string name="widget_pulse_label">Vinaraa Pulse</string>
+    <string name="widget_pulse_desc">Today\'s listening time, streak and 7-day trend.</string>
+
+    <string name="widget_top_label">Vinaraa Top</string>
+    <string name="widget_top_desc">Your top 3 songs this week.</string>
+
+    <string name="widget_mix_label">Vinaraa Mix</string>
+    <string name="widget_mix_desc">One-tap shortcuts for your playlists and downloads.</string>
+
+    <string name="widget_vinyl_label">Vinaraa Vinyl</string>
+    <string name="widget_vinyl_desc">Spinning vinyl record player widget.</string>
+
+    <string name="widget_recap_label">Vinaraa Recap</string>
+    <string name="widget_recap_desc">Weekly listening recap, top singer &amp; song.</string>
 </resources>

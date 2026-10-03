@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/w_recap_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/w_bg"
+    android:padding="12dp"
+    android:orientation="vertical"
+    android:gravity="center_vertical">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="YOUR WEEKLY RECAP"
+        android:textColor="@color/w_ink_2"
+        android:textSize="10sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/w_recap_hero"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="0h 0m"
+        android:textColor="@color/w_ink"
+        android:textSize="30sp"
+        android:textStyle="bold"
+        android:layout_marginTop="4dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginTop="8dp">
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:src="@drawable/ic_flame" />
+
+        <TextView
+            android:id="@+id/w_recap_streak"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="0 day streak"
+            android:textColor="@color/w_amber"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:layout_marginStart="4dp" />
+    </LinearLayout>
+</LinearLayout>

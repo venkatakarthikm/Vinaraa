@@ -25,18 +25,17 @@ router.use(authenticate);
  */
 
 const LANGUAGES = [
+  { code: 'telugu', label: 'Telugu', emoji: '🎥' },
   { code: 'hindi', label: 'Hindi', emoji: '🇮🇳' },
   { code: 'english', label: 'English', emoji: '🌍' },
   { code: 'punjabi', label: 'Punjabi', emoji: '🪘' },
   { code: 'tamil', label: 'Tamil', emoji: '🎬' },
-  { code: 'telugu', label: 'Telugu', emoji: '🎥' },
   { code: 'kannada', label: 'Kannada', emoji: '🎼' },
   { code: 'malayalam', label: 'Malayalam', emoji: '🌴' },
   { code: 'marathi', label: 'Marathi', emoji: '🎭' },
   { code: 'bengali', label: 'Bengali', emoji: '🎻' },
   { code: 'gujarati', label: 'Gujarati', emoji: '🪔' },
   { code: 'bhojpuri', label: 'Bhojpuri', emoji: '🥁' },
-  { code: 'urdu', label: 'Urdu', emoji: '🌙' },
   { code: 'haryanvi', label: 'Haryanvi', emoji: '🌾' },
   { code: 'rajasthani', label: 'Rajasthani', emoji: '🏜️' },
   { code: 'assamese', label: 'Assamese', emoji: '🛶' },

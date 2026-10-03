@@ -156,5 +156,5 @@ export const stats = {
 
 // ── Notifications ──────────────────────────────────────────────────────────
 export const notifications = {
-  registerDevice: (body: any) => apiClient<any>('/notifications/register', { method: 'POST', body: JSON.stringify(body) }),
+  registerDevice: (body: any) => apiClient<any>('/notifications/devices', { method: 'POST', body: JSON.stringify(body) }),
 };

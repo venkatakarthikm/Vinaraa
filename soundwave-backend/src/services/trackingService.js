@@ -34,7 +34,7 @@ const SEEK_TOLERANCE_MS = 2500;
 const MAX_CREDIT_PER_HEARTBEAT_MS = 5 * 60000; // a client asleep for 10 min must not credit 10 min
 const HEARTBEAT_STALE_MS = 10 * 60000;
 
-const ACTIVE_STATES = new Set(['playing']);
+const ACTIVE_STATES = new Set(['playing', 'ended']);
 
 function computeCredit(session, { positionMs, state, now }) {
   const elapsed = Math.max(0, now - new Date(session.lastHeartbeatAt || session.startedAt).getTime());
@@ -167,6 +167,11 @@ async function heartbeat(user, sessionId, { positionMs, state = 'playing', clien
     session.seekDistanceMs += seekDistance;
   }
   session.recompute();
+  if (!session.isCompleted && session.durationMs > 0 &&
+      session.listenedMs >= session.durationMs * env.RECO_PLAY_RATIO &&
+      now - new Date(session.lastHeartbeatAt || session.startedAt).getTime() > 30_000) {
+    session.isCompleted = true;
+  }
   if (session.segments.length > 500) session.segments = session.segments.slice(-200); // bound the document
 
   // A client-observed completion is trusted only when our measured time agrees.

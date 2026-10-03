@@ -1,7 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="colorPrimary">#8B3DFF</color>
-    <color name="colorPrimaryDark">#0B0A1A</color>
-    <color name="colorAccent">#FF3D8E</color>
-    <color name="vinaraa_bg">#0B0A1A</color>
+    <color name="w_bg">#F7F5FF</color>
+    <color name="w_bg_top">#FFFFFF</color>
+    <color name="w_surface">#FFFFFF</color>
+    <color name="w_surface_2">#EFEBFF</color>
+    <color name="w_line">#DDD6F5</color>
+    <color name="w_ink">#16132B</color>
+    <color name="w_ink_2">#5E5A82</color>
+    <color name="w_primary">#6D3BF0</color>
+    <color name="w_primary_dim">#ECE5FF</color>
+    <color name="w_accent">#D6307E</color>
+    <color name="w_mint">#0E9F7E</color>
+    <color name="w_amber">#B7791F</color>
+    <color name="w_danger">#C62D4E</color>
 </resources>

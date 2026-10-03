@@ -23,6 +23,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="vinaraa" />
+            </intent-filter>
+
         </activity>
 
         <provider
@@ -43,6 +50,51 @@
                 <action android:name="androidx.media3.session.MediaSessionService" />
             </intent-filter>
         </service>
+
+        <!-- Home Screen Widgets -->
+        <receiver android:name=".widget.VinaraaNowWidget" android:exported="true" android:label="@string/widget_now_label">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_now_info" />
+        </receiver>
+
+        <receiver android:name=".widget.VinaraaDeckWidget" android:exported="true" android:label="@string/widget_deck_label">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_deck_info" />
+        </receiver>
+
+        <receiver android:name=".widget.VinaraaPulseWidget" android:exported="true" android:label="@string/widget_pulse_label">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_pulse_info" />
+        </receiver>
+
+        <receiver android:name=".widget.VinaraaTopWidget" android:exported="true" android:label="@string/widget_top_label">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_top_info" />
+        </receiver>
+
+        <receiver android:name=".widget.VinaraaMixWidget" android:exported="true" android:label="@string/widget_mix_label">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_mix_info" />
+        </receiver>
+
+        <receiver android:name=".widget.VinaraaVinylWidget" android:exported="true" android:label="@string/widget_vinyl_label">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_vinyl_info" />
+        </receiver>
+
+        <receiver android:name=".widget.VinaraaRecapWidget" android:exported="true" android:label="@string/widget_recap_label">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_recap_info" />
+        </receiver>
+
+        <receiver android:name=".widget.WidgetActionReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="com.music.vinaraa.widget.TOGGLE" />
+                <action android:name="com.music.vinaraa.widget.NEXT" />
+                <action android:name="com.music.vinaraa.widget.PREV" />
+                <action android:name="com.music.vinaraa.widget.REFRESH" />
+            </intent-filter>
+        </receiver>
     </application>
 
     <!-- Permissions -->

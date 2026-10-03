@@ -185,18 +185,18 @@ const startSessionSchema = z.object({
   body: z.object({
     songId: saavnId,
     deviceId: z.string().max(120).optional(),
-    source: z.enum(['search', 'playlist', 'album', 'artist', 'recommendation', 'radio', 'library', 'offline', 'unknown']).default('unknown'),
+    source: z.enum(['search', 'playlist', 'album', 'artist', 'recommendation', 'radio', 'library', 'offline', 'unknown']).catch('unknown'),
     contextId: z.string().max(120).optional(),
-    positionMs: z.number().int().min(0).default(0),
+    positionMs: z.number().min(0).transform((n) => Math.round(n)).catch(0),
   }),
 });
 
 const heartbeatSchema = z.object({
   body: z.object({
-    positionMs: z.number().int().min(0),
-    state: z.enum(['playing', 'paused', 'buffering', 'ended']).default('playing'),
+    positionMs: z.number().min(0).transform((n) => Math.round(n)).catch(0),
+    state: z.enum(['playing', 'paused', 'buffering', 'ended']).catch('playing'),
     clientTimestamp: z.number().int().optional(),
-    bufferedMs: z.number().int().min(0).optional(),
+    bufferedMs: z.number().min(0).transform((n) => Math.round(n)).catch(0).optional(),
   }),
 });
 

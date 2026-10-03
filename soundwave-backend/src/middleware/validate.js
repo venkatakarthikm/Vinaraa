@@ -21,12 +21,15 @@ function validate(schema, part) {
       return next();
     } catch (err) {
       if (err.name === 'ZodError') {
-        return next(
-          AppError.unprocessable(
-            'Validation failed',
-            (err.issues || []).map((i) => ({ path: i.path.join('.'), message: i.message, code: i.code }))
-          )
+        const hint = req.path.startsWith('/tracking')
+          ? 'Tracking payload rejected: no listening session was created for this play.'
+          : undefined;
+        const appErr = AppError.unprocessable(
+          'Validation failed',
+          (err.issues || []).map((i) => ({ path: i.path.join('.'), message: i.message, code: i.code }))
         );
+        if (hint) appErr.hint = hint;
+        return next(appErr);
       }
       return next(err);
     }

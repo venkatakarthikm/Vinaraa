@@ -21,12 +21,15 @@ class PlaybackService : MediaSessionService() {
 
     private var currentSessionId: String? = null
     private var lastKnownPositionMs: Long = 0L
+    private var previousDurationMs: Long = 0L
     private val heartbeatHandler = Handler(Looper.getMainLooper())
     private var heartbeatRunnable: Runnable? = null
 
     companion object {
         const val ACTION_NEXT = "com.music.vinaraa.ACTION_NEXT"
         const val ACTION_PREVIOUS = "com.music.vinaraa.ACTION_PREVIOUS"
+        @JvmStatic
+        var activeSessionId: String? = null
     }
 
     override fun onCreate() {
@@ -62,8 +65,11 @@ class PlaybackService : MediaSessionService() {
     }
 
     private fun setupTrackingListener(player: ExoPlayer) {
+        // ONE always-running 10 s ticker. It self-checks every condition so it can never be
+        // "not started" because of a race between playback start and async HTTP session creation.
         heartbeatRunnable = object : Runnable {
             override fun run() {
+                if (player.isPlaying) lastKnownPositionMs = player.currentPosition
                 val sid = currentSessionId
                 if (sid != null && player.isPlaying) {
                     TrackingClient.heartbeat(
@@ -73,26 +79,38 @@ class PlaybackService : MediaSessionService() {
                         bufferedMs = player.bufferedPosition
                     )
                 }
-                heartbeatHandler.postDelayed(this, 12000)
+                heartbeatHandler.postDelayed(this, 10_000)
             }
         }
+        heartbeatHandler.post(heartbeatRunnable!!)
 
         player.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                // 1) Close the OUTGOING session with its TRUE final position.
                 val oldSid = currentSessionId
                 if (oldSid != null) {
-                    TrackingClient.endSession(oldSid, lastKnownPositionMs)
+                    val exitPos = when (reason) {
+                        Player.MEDIA_ITEM_TRANSITION_REASON_AUTO,
+                        Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT ->
+                            maxOf(lastKnownPositionMs, previousDurationMs)
+                        else -> maxOf(lastKnownPositionMs, player.currentPosition)
+                    }
+                    TrackingClient.heartbeat(oldSid, exitPos, "ended", player.bufferedPosition)
+                    TrackingClient.endSession(oldSid, exitPos)
                     currentSessionId = null
+                    activeSessionId = null
                 }
-                
+                lastKnownPositionMs = 0L
+
+                // 2) Open the NEW session.
                 val songId = mediaItem?.mediaId
-                if (songId != null && songId.isNotEmpty()) {
-                    TrackingClient.startSession(
-                        songId = songId,
-                        source = mediaItem.mediaMetadata.extras?.getString("source"),
-                        contextId = mediaItem.mediaMetadata.extras?.getString("contextId")
-                    ) { sid ->
+                if (!songId.isNullOrEmpty()) {
+                    val src = mediaItem.mediaMetadata.extras?.getString("source") ?: "unknown"
+                    val ctx = mediaItem.mediaMetadata.extras?.getString("contextId")
+                    previousDurationMs = mediaItem.mediaMetadata.durationMs ?: 0L
+                    TrackingClient.startSession(songId, src, ctx) { sid ->
                         currentSessionId = sid
+                        activeSessionId = sid
                     }
                 }
             }
@@ -105,12 +123,6 @@ class PlaybackService : MediaSessionService() {
                     state = if (isPlaying) "playing" else "paused",
                     bufferedMs = player.bufferedPosition
                 )
-                
-                if (isPlaying) {
-                    heartbeatHandler.postDelayed(heartbeatRunnable!!, 12000)
-                } else {
-                    heartbeatHandler.removeCallbacks(heartbeatRunnable!!)
-                }
             }
 
             override fun onPositionDiscontinuity(
@@ -134,14 +146,11 @@ class PlaybackService : MediaSessionService() {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == Player.STATE_ENDED) {
                     currentSessionId?.let { sid ->
-                        TrackingClient.heartbeat(
-                            sessionId = sid,
-                            positionMs = player.currentPosition,
-                            state = "ended",
-                            bufferedMs = player.bufferedPosition
-                        )
-                        TrackingClient.endSession(sid, player.currentPosition)
+                        val endPos = maxOf(player.currentPosition, previousDurationMs)
+                        TrackingClient.heartbeat(sid, endPos, "ended", player.bufferedPosition)
+                        TrackingClient.endSession(sid, endPos)
                         currentSessionId = null
+                        activeSessionId = null
                     }
                 }
             }
@@ -152,12 +161,24 @@ class PlaybackService : MediaSessionService() {
         return mediaSession
     }
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        val p = exoPlayer
+        if (p == null || !p.isPlaying) {
+            currentSessionId?.let { TrackingClient.endSession(it, p?.currentPosition ?: 0L) }
+            currentSessionId = null
+            activeSessionId = null
+            stopSelf()
+        }
+        super.onTaskRemoved(rootIntent)
+    }
+
     override fun onDestroy() {
         heartbeatRunnable?.let { heartbeatHandler.removeCallbacks(it) }
         currentSessionId?.let { sid ->
             exoPlayer?.let { p ->
                 TrackingClient.endSession(sid, p.currentPosition)
             }
+            activeSessionId = null
         }
         mediaSession?.run {
             exoPlayer?.release()
