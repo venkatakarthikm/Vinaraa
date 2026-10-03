@@ -153,7 +153,7 @@ export default function Settings() {
                   onChange={(e) => setReduceEffects(e.target.checked)}
                   className="sr-only peer"
                 />
-                <div className="w-[52px] h-[32px] bg-line peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-[24px] after:w-[24px] after:transition-all peer-checked:bg-primary" />
+                <div className="w-[52px] h-[32px] bg-line peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white peer-checked:after:bg-on-primary after:rounded-full after:h-[24px] after:w-[24px] after:transition-all peer-checked:bg-primary shadow-inner" />
               </label>
             </div>
           </div>
@@ -187,7 +187,7 @@ export default function Settings() {
                   onChange={(e) => updatePref('dataSaver', e.target.checked)}
                   className="sr-only peer"
                 />
-                <div className="w-[52px] h-[32px] bg-line peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-[24px] after:w-[24px] after:transition-all peer-checked:bg-primary" />
+                <div className="w-[52px] h-[32px] bg-line peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white peer-checked:after:bg-on-primary after:rounded-full after:h-[24px] after:w-[24px] after:transition-all peer-checked:bg-primary shadow-inner" />
               </label>
             </div>
 
@@ -202,7 +202,7 @@ export default function Settings() {
                   onChange={(e) => updatePref('autoplay', e.target.checked)}
                   className="sr-only peer"
                 />
-                <div className="w-[52px] h-[32px] bg-line peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-[24px] after:w-[24px] after:transition-all peer-checked:bg-primary" />
+                <div className="w-[52px] h-[32px] bg-line peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white peer-checked:after:bg-on-primary after:rounded-full after:h-[24px] after:w-[24px] after:transition-all peer-checked:bg-primary shadow-inner" />
               </label>
             </div>
 
@@ -215,7 +215,7 @@ export default function Settings() {
                   onChange={(e) => updatePref('explicitContent', e.target.checked)}
                   className="sr-only peer"
                 />
-                <div className="w-[52px] h-[32px] bg-line peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-[24px] after:w-[24px] after:transition-all peer-checked:bg-primary" />
+                <div className="w-[52px] h-[32px] bg-line peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white peer-checked:after:bg-on-primary after:rounded-full after:h-[24px] after:w-[24px] after:transition-all peer-checked:bg-primary shadow-inner" />
               </label>
             </div>
           </div>
