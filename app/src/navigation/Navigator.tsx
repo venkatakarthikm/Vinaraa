@@ -19,6 +19,7 @@ import FullPlayer from '@/screens/FullPlayer';
 import Profile from '@/screens/Profile';
 import Settings from '@/screens/Settings';
 import Offline from '@/screens/Offline';
+import AdminDashboard from '@/screens/AdminDashboard';
 import NotFound from '@/screens/NotFound';
 import { BottomNav } from '@/components/BottomNav';
 import MiniPlayer from '@/components/MiniPlayer';
@@ -114,6 +115,7 @@ export default function Navigator() {
             <Route path="/settings" element={<Settings />} />
             <Route path="/downloads" element={<Offline />} />
             <Route path="/offline" element={<Offline />} />
+            <Route path="/admin" element={<AdminDashboard />} />
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>

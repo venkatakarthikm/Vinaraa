@@ -3,32 +3,43 @@ import { useNavigate } from 'react-router-dom';
 import { WifiOff, Download } from 'lucide-react';
 import Button from '@/components/Button';
 import { useUIStore } from '@/store/ui';
+import { useAuthStore } from '@/store/auth';
 
 export default function Offline() {
   const navigate = useNavigate();
   const addToast = useUIStore((s) => s.addToast);
+  const { checkAuth } = useAuthStore();
   const [checking, setChecking] = useState(false);
 
   useEffect(() => {
-    const handleOnline = () => {
+    const handleOnline = async () => {
       addToast('Back online', 'success');
-      navigate(-1);
+      await checkAuth();
+      if (useAuthStore.getState().isAuthenticated) {
+        navigate('/home', { replace: true });
+      } else {
+        navigate('/login', { replace: true });
+      }
     };
     window.addEventListener('online', handleOnline);
     return () => window.removeEventListener('online', handleOnline);
-  }, [navigate, addToast]);
+  }, [navigate, addToast, checkAuth]);
 
-  const handleTryAgain = () => {
+  const handleTryAgain = async () => {
     setChecking(true);
-    setTimeout(() => {
-      setChecking(false);
-      if (navigator.onLine) {
-        addToast('Back online', 'success');
-        navigate(-1);
+    await checkAuth();
+    setChecking(false);
+
+    if (navigator.onLine) {
+      addToast('Back online', 'success');
+      if (useAuthStore.getState().isAuthenticated) {
+        navigate('/home', { replace: true });
       } else {
-        addToast('Still offline', 'info');
+        navigate('/login', { replace: true });
       }
-    }, 1000);
+    } else {
+      addToast('Still offline', 'info');
+    }
   };
 
   return (
@@ -46,7 +57,7 @@ export default function Offline() {
       <div className="flex flex-col gap-3 w-full max-w-[280px]">
         <Button
           size="lg"
-          onClick={() => navigate('/library', { state: { tab: 'downloads' } })}
+          onClick={() => navigate('/downloads')}
           className="w-full flex items-center justify-center gap-2"
         >
           <Download size={18} />

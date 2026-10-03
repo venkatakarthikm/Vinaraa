@@ -16,6 +16,36 @@ const s = require('../validators/schemas');
 
 const router = express.Router();
 
+router.get(
+  '/home/popup',
+  asyncHandler(async (req, res) => {
+    const Popup = require('../models/Popup');
+    const { sanitizeHtml, renderPlaceholders } = require('../services/sanitizer');
+
+    const filter = { enabled: true };
+    if (req.user) {
+      filter.$or = [
+        { 'audience.mode': 'all' },
+        { 'audience.mode': 'selected', 'audience.userIds': req.user._id },
+      ];
+    } else {
+      filter['audience.mode'] = 'all';
+    }
+
+    const popup = await Popup.findOne(filter).sort({ updatedAt: -1 }).lean();
+    if (!popup) return ok(res, { popup: null });
+
+    const renderedHtml = renderPlaceholders(sanitizeHtml(popup.html), req.user || {});
+    return ok(res, {
+      popup: {
+        id: String(popup._id),
+        name: popup.name,
+        html: renderedHtml,
+      },
+    });
+  })
+);
+
 /** Public browse endpoints work anonymously; personalised ones use optionalAuth. */
 router.use(optionalAuth);
 

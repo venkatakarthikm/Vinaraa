@@ -54,8 +54,12 @@ export default function Search() {
     if (!query.trim()) {
       setSuggestions([]);
       setResults(null);
+      setLoading(false);
       return;
     }
+
+    setResults(null);
+    setLoading(true);
 
     const timer = setTimeout(() => {
       if (abortControllerRef.current) abortControllerRef.current.abort();
@@ -68,7 +72,6 @@ export default function Search() {
 
       // Full Search if length >= 2
       if (query.trim().length >= 2) {
-        setLoading(true);
         setError(false);
         music.search(
           { q: query.trim(), type: activeType, page: 0, limit: 20, language: selectedLanguage === 'All' ? undefined : selectedLanguage },
@@ -82,6 +85,8 @@ export default function Search() {
             if (e.name !== 'AbortError') setError(true);
           })
           .finally(() => setLoading(false));
+      } else {
+        setLoading(false);
       }
     }, 250);
 
@@ -176,15 +181,31 @@ export default function Search() {
                 <button
                   key={idx}
                   onClick={() => {
-                    setQuery(item.text || item);
-                    setSuggestions([]);
+                    if (item.type === 'album' && item.id) {
+                      navigate(`/album/${item.id}`);
+                    } else if (item.type === 'artist' && item.id) {
+                      navigate(`/artist/${item.id}`);
+                    } else if (item.type === 'song' && item.id) {
+                      setQueue([formatPlayerSong(item)], 0, 'search', item.id, item.text);
+                      navigate('/player');
+                    } else {
+                      setQuery(item.text || item);
+                      setSuggestions([]);
+                    }
                   }}
-                  className="w-full h-[48px] px-4 flex items-center gap-3 hover:bg-surface-2 rounded-[16px] text-left transition-colors"
+                  className="w-full h-[48px] px-4 flex items-center justify-between hover:bg-surface-2 rounded-[16px] text-left transition-colors"
                 >
-                  <SearchIcon size={18} className="text-muted flex-shrink-0" />
-                  <span className="t-body text-[15px] font-medium text-text truncate">
-                    {item.text || item}
-                  </span>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <SearchIcon size={18} className="text-muted flex-shrink-0" />
+                    <span className="t-body text-[15px] font-medium text-text truncate">
+                      {item.text || item}
+                    </span>
+                  </div>
+                  {item.subtitle && (
+                    <span className="t-micro text-[11px] text-muted font-semibold ml-2 flex-shrink-0">
+                      {item.subtitle}
+                    </span>
+                  )}
                 </button>
               ))}
             </motion.div>

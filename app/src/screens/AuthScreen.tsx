@@ -74,6 +74,10 @@ export default function AuthScreen({ initialTab = 'login' }: { initialTab?: 'log
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!navigator.onLine) {
+      addToast('Connect to the internet to sign in or create an account', 'info');
+      return;
+    }
     if (!validate()) return;
 
     setLoading(true);

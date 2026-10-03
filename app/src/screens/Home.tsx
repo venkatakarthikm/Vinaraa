@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Settings, Sparkles, Play, CircleAlert } from 'lucide-react';
+import { Bell, Settings, Sparkles, Play, CircleAlert, X } from 'lucide-react';
 import { recommendations, music } from '@/api/endpoints';
+import { apiClient } from '@/api/client';
 import { useAuthStore } from '@/store/auth';
 import { usePlayerStore } from '@/store/player';
 import { MediaCard } from '@/components/MediaCard';
 import Chip from '@/components/Chip';
 import { Skeleton, MediaCardSkeleton } from '@/components/Skeleton';
 import { formatPlayerSong } from '@/utils/song';
+import { getMediaImage } from '@/utils/image';
 import { Sheet } from '@/components/SheetHost';
 import Button from '@/components/Button';
 
@@ -30,17 +32,19 @@ export default function Home() {
   const [error, setError] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState<string>('All');
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [timeOutFallback, setTimeOutFallback] = useState(false);
+  const [activePopup, setActivePopup] = useState<any>(null);
 
-  // Name calculation (§2.1)
+  // First name calculation (§2.1)
+  const firstName = user?.name?.trim().split(/\s+/)[0] || null;
+
+  // Load active home popup once on mount
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (!user) setTimeOutFallback(true);
-    }, 5000);
-    return () => clearTimeout(timer);
-  }, [user]);
-
-  const firstName = user?.name?.trim().split(/\s+/)[0] || (timeOutFallback ? 'there' : null);
+    apiClient<any>('/music/home/popup')
+      .then((res: any) => {
+        if (res?.popup) setActivePopup(res.popup);
+      })
+      .catch(() => {});
+  }, []);
 
   const loadHomeData = async (lang = 'All') => {
     setLoading(true);
@@ -134,58 +138,69 @@ export default function Home() {
         </header>
 
         {/* Content Width Centered */}
-        <main className="w-full max-w-[480px] mx-auto flex flex-col gap-6 pt-4">
-          {/* Banner Carousel (Slim h 148) */}
-          <section className="px-5">
+        <main className="w-full max-w-[480px] mx-auto flex flex-col gap-6 pt-2">
+          {/* Banner Carousel (Portrait Cards 4:5 ratio) */}
+          <section className="px-5 flex flex-col gap-3">
+            <div className="flex items-center gap-1.5 text-text">
+              <Sparkles size={18} className="text-primary" />
+              <h2 className="t-h2 text-[20px] font-bold text-text">Made for you</h2>
+            </div>
+
             {loading ? (
-              <Skeleton width="100%" height={148} radius={28} />
+              <div className="flex gap-3 overflow-x-hidden">
+                <Skeleton width={180} height={225} radius={24} />
+                <Skeleton width={180} height={225} radius={24} />
+                <Skeleton width={180} height={225} radius={24} />
+              </div>
             ) : bannerRails.length > 0 ? (
-              <div className="flex gap-3 overflow-x-auto snap-x no-scrollbar">
+              <div className="flex gap-3.5 overflow-x-auto snap-x no-scrollbar">
                 {bannerRails.map((rail, idx) => {
-                  const coverImage = rail.items?.[0]?.image;
+                  const coverImage = getMediaImage(rail.items?.[0] || rail);
                   return (
                     <div
                       key={rail.key || idx}
-                      className="relative min-w-[calc(100%-16px)] h-[148px] rounded-[28px] overflow-hidden flex-shrink-0 snap-center shadow-lg cursor-pointer"
+                      className="relative min-w-[180px] w-[180px] h-[225px] rounded-[24px] overflow-hidden flex-shrink-0 snap-start shadow-md cursor-pointer group"
                       onClick={() => navigate(`/list/${rail.key}`)}
                     >
-                      {coverImage && (
+                      {coverImage ? (
                         <img
                           src={coverImage}
                           alt={rail.title}
                           className="absolute inset-0 w-full h-full object-cover"
                         />
+                      ) : (
+                        <div className="absolute inset-0 bg-surface-2 flex items-center justify-center text-muted">🎵</div>
                       )}
-                      <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/50 to-transparent" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
 
-                      <div className="relative z-10 p-5 h-full flex flex-col justify-between items-start">
-                        <div>
-                          <div className="flex items-center gap-1.5 text-white/80">
-                            <Sparkles size={14} className="text-primary" />
-                            <span className="t-micro text-[11px] font-semibold uppercase">
-                              Made for you
-                            </span>
+                      <div className="relative z-10 p-4 h-full flex flex-col justify-between items-start">
+                        <span className="t-micro text-[10px] font-bold uppercase tracking-wider bg-black/50 backdrop-blur-xs px-2 py-0.5 rounded-full text-white/90">
+                          Mix
+                        </span>
+
+                        <div className="w-full flex flex-col gap-2">
+                          <div>
+                            <h3 className="t-h3 text-[15px] font-bold text-white line-clamp-2 leading-tight">
+                              {rail.title}
+                            </h3>
+                            {rail.subtitle && (
+                              <p className="t-cap text-[11px] text-white/70 truncate mt-0.5">
+                                {rail.subtitle}
+                              </p>
+                            )}
                           </div>
-                          <h2 className="t-h2 text-[18px] font-extrabold text-white line-clamp-2 mt-1">
-                            {rail.title}
-                          </h2>
-                          {rail.subtitle && (
-                            <p className="t-cap text-[12px] text-white/70 truncate">
-                              {rail.subtitle}
-                            </p>
-                          )}
-                        </div>
 
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handlePlayRail(rail);
-                          }}
-                          className="h-[36px] px-4 rounded-full bg-primary text-on-primary flex items-center gap-2 t-cap text-[12px] font-bold shadow-md active:scale-95 transition-transform"
-                        >
-                          <Play size={16} fill="currentColor" />
-                          <span>Play</span>
-                        </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handlePlayRail(rail);
+                            }}
+                            className="h-[36px] w-full rounded-full bg-primary text-on-primary flex items-center justify-center gap-1.5 t-cap text-[12px] font-bold shadow-md active:scale-95 transition-transform"
+                          >
+                            <Play size={14} fill="currentColor" />
+                            <span>Play</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -306,6 +321,46 @@ export default function Home() {
           </Button>
         </div>
       </Sheet>
+
+      {/* Active Home Popup Modal */}
+      {activePopup && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="relative w-full max-w-[92vw] max-h-[60vh] bg-surface surface-glass rounded-[28px] border border-line p-5 shadow-2xl flex flex-col overflow-hidden">
+            <button
+              onClick={() => setActivePopup(null)}
+              className="absolute top-3 right-3 w-8 h-8 rounded-full bg-surface-2 text-text flex items-center justify-center z-10"
+              aria-label="Close popup"
+            >
+              <X size={18} />
+            </button>
+
+            <div
+              className="flex-1 overflow-y-auto overscroll-contain pr-1 text-text"
+              onClick={(e) => {
+                const target = (e.target as HTMLElement).closest('[data-vinaraa-action]');
+                if (target) {
+                  const action = target.getAttribute('data-vinaraa-action');
+                  const id = target.getAttribute('data-vinaraa-id');
+                  if (action === 'open-album' && id) {
+                    setActivePopup(null);
+                    navigate(`/album/${id}`);
+                  } else if (action === 'open-artist' && id) {
+                    setActivePopup(null);
+                    navigate(`/artist/${id}`);
+                  } else if (action === 'play-song' && id) {
+                    setActivePopup(null);
+                    music.song(id).then((s: any) => {
+                      setQueue([formatPlayerSong(s)], 0, 'home_popup', id, 'Popup');
+                      navigate('/player');
+                    }).catch(() => {});
+                  }
+                }
+              }}
+              dangerouslySetInnerHTML={{ __html: activePopup.html }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

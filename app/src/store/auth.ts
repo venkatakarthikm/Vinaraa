@@ -8,11 +8,15 @@ export interface User {
   handle?: string;
   email: string;
   avatarUrl?: string;
+  role?: 'user' | 'admin';
   preferences?: any;
   onboarding?: any;
 }
 
+export type AuthStatus = 'idle' | 'checking' | 'authenticated' | 'unauthenticated';
+
 interface AuthState {
+  authStatus: AuthStatus;
   isAuthenticated: boolean;
   user: User | null;
   login: (user: User, tokens: { accessToken: string }) => Promise<void>;
@@ -22,6 +26,7 @@ interface AuthState {
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
+  authStatus: 'idle',
   isAuthenticated: false,
   user: null,
 
@@ -33,7 +38,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       localStorage.setItem('mockAccessToken', tokens.accessToken);
     }
     localStorage.setItem('vinaraaUser', JSON.stringify(user));
-    set({ isAuthenticated: true, user });
+    set({ isAuthenticated: true, user, authStatus: 'authenticated' });
   },
 
   logout: async (options) => {
@@ -43,7 +48,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       localStorage.removeItem('mockAccessToken');
     }
     localStorage.removeItem('vinaraaUser');
-    set({ isAuthenticated: false, user: null });
+    set({ isAuthenticated: false, user: null, authStatus: 'unauthenticated' });
     
     if (options?.reason) {
       useUIStore.getState().addToast(options.reason, 'info');
@@ -51,6 +56,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   checkAuth: async () => {
+    set((s) => ({ authStatus: s.authStatus === 'idle' ? 'checking' : s.authStatus }));
     try {
       let token: string | null = null;
       try {
@@ -60,52 +66,47 @@ export const useAuthStore = create<AuthState>((set) => ({
         token = localStorage.getItem('mockAccessToken');
       }
 
+      const storedUser = localStorage.getItem('vinaraaUser');
+      const cachedUser = storedUser ? JSON.parse(storedUser) : null;
+
       if (token && token.length > 0) {
-        const storedUser = localStorage.getItem('vinaraaUser');
-        const user = storedUser ? JSON.parse(storedUser) : null;
-        if (user) {
-          set({ isAuthenticated: true, user });
+        if (cachedUser) {
+          set({ isAuthenticated: true, user: cachedUser, authStatus: 'authenticated' });
         }
 
         if (navigator.onLine) {
           try {
             const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://vinaraa.onrender.com/api/v1';
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            const timeoutId = setTimeout(() => controller.abort(), 6000);
             const res = await fetch(`${API_BASE}/users/me`, {
               headers: { Authorization: `Bearer ${token}` },
               signal: controller.signal
             });
             clearTimeout(timeoutId);
-            
+
             if (res.ok) {
               const json = await res.json();
               const profile = json?.data?.user ?? json?.data;
               if (profile?.name) {
                 localStorage.setItem('vinaraaUser', JSON.stringify(profile));
-                set({ isAuthenticated: true, user: profile });
+                set({ isAuthenticated: true, user: profile, authStatus: 'authenticated' });
               }
-            } else {
-              const json = await res.json();
-              const errCode = json.error?.code;
-              if (res.status === 401 && ['TOKEN_INVALID', 'SESSION_REVOKED', 'USER_NOT_FOUND'].includes(errCode)) {
-                useAuthStore.getState().logout({ reason: 'Your session ended. Please sign in again.' });
-              }
+            } else if (res.status === 401) {
+              await useAuthStore.getState().logout({ reason: 'Your session ended. Please sign in again.' });
             }
-          } catch (e: any) {
-            // Network failure or timeout -> stay logged in (offline mode)
+          } catch (_e) {
+            if (cachedUser) {
+              set({ isAuthenticated: true, user: cachedUser, authStatus: 'authenticated' });
+            }
           }
         }
       } else {
-        set((state) => {
-          if (!state.isAuthenticated) {
-            return { isAuthenticated: false, user: null };
-          }
-          return state;
-        });
+        set({ isAuthenticated: false, user: null, authStatus: 'unauthenticated' });
       }
     } catch (_e) {
-      console.warn('[Auth] checkAuth encountered an error:', _e);
+      console.warn('[Auth] checkAuth error:', _e);
+      set((s) => ({ authStatus: s.user ? 'authenticated' : 'unauthenticated' }));
     }
   },
 
