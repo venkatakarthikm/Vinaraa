@@ -10,12 +10,12 @@ import ThemeSheet from '@/components/ThemeSheet';
 import { Sheet } from '@/components/SheetHost';
 import Input from '@/components/Input';
 import Button from '@/components/Button';
-import { ChevronRight, SunMoon, Palette, Check } from 'lucide-react';
+import { ChevronRight, SunMoon, Palette, Check, ShieldCheck } from 'lucide-react';
 
 export default function Settings() {
   const navigate = useNavigate();
   const addToast = useUIStore((s) => s.addToast);
-  const logout = useAuthStore((s) => s.logout);
+  const { user, logout } = useAuthStore();
 
   const {
     theme,
@@ -94,6 +94,25 @@ export default function Settings() {
   return (
     <Page title="Settings">
       <div className="flex flex-col gap-6 px-5 pt-4 pb-[120px]">
+        {/* ADMIN SHORTCUT (Visible when user.role === 'admin') */}
+        {user?.role === 'admin' && (
+          <section className="flex flex-col gap-2">
+            <span className="t-micro text-[11px] font-bold text-primary uppercase tracking-wider px-1">
+              Administrator
+            </span>
+            <button
+              onClick={() => navigate('/admin')}
+              className="h-[56px] px-4 rounded-[24px] bg-primary/12 border border-primary/30 flex items-center justify-between hover:bg-primary/20 transition-colors text-left"
+            >
+              <div className="flex items-center gap-3">
+                <ShieldCheck size={20} className="text-primary" />
+                <span className="t-h3 text-[15px] font-bold text-primary">Admin Dashboard</span>
+              </div>
+              <ChevronRight size={18} className="text-primary" />
+            </button>
+          </section>
+        )}
+
         {/* GROUP 1: APPEARANCE */}
         <section className="flex flex-col gap-2">
           <span className="t-micro text-[11px] font-bold text-muted uppercase tracking-wider px-1">
