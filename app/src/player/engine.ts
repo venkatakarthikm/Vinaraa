@@ -128,7 +128,7 @@ export function startPlayerEngine() {
         if (song) {
           loadedId = song.id;
         }
-        st.setState({ currentIndex: e.index, isPlaying: e.isPlaying ?? true });
+        st.setState({ currentIndex: e.index, isPlaying: e.isPlaying ?? true, desiredPlaying: e.isPlaying ?? true });
       }
       useProgressStore.setState({ positionMs: 0, durationMs: song?.durationMs ?? 0, epoch: p.epoch + 1 });
     }
@@ -136,13 +136,15 @@ export function startPlayerEngine() {
 
   VinaraaPlayer.addListener('progress', (e: any) => {
     consecutiveErrors = 0;
-    if (!e.songId || e.songId !== loadedId) return;
-    if (st.getState().seekRequestMs == null) {
+    if (st.getState().seekRequestMs == null && typeof e.positionMs === 'number') {
       useProgressStore.setState({
         positionMs: e.positionMs,
         durationMs: e.durationMs > 0 ? e.durationMs : useProgressStore.getState().durationMs,
-        bufferedMs: e.bufferedMs,
+        bufferedMs: e.bufferedMs || 0,
       });
+    }
+    if (typeof e.isPlaying === 'boolean') {
+      st.setState({ isPlaying: e.isPlaying, desiredPlaying: e.isPlaying });
     }
   });
 
@@ -156,7 +158,10 @@ export function startPlayerEngine() {
       return;
     }
     if (typeof e.isPlaying === 'boolean') {
-      st.setState({ isPlaying: e.isPlaying });
+      st.setState({ isPlaying: e.isPlaying, desiredPlaying: e.isPlaying });
+    }
+    if (typeof e.positionMs === 'number') {
+      useProgressStore.setState({ positionMs: e.positionMs });
     }
   });
 

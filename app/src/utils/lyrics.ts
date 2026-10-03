@@ -70,13 +70,16 @@ export async function fetchLrclib(
     if (hit.syncedLyrics) {
       const parsed = hit.syncedLyrics.split('\n').map((l: string) => {
         const m = l.match(/^\[(\d+):(\d+(?:\.\d+)?)\](.*)/);
-        return m ? { t: +m[1] * 60 + +m[2], x: m[3].trim() || '♪' } : null;
+        if (!m) return null;
+        const sec = +m[1] * 60 + +m[2];
+        const textOnly = m[3].replace(/\[\d+:\d+(?:\.\d+)?\]/g, '').trim();
+        return { t: sec, x: textOnly || '♪' };
       }).filter(Boolean);
       return { type: 'synced', lines: parsed };
     } else if (hit.plainLyrics) {
       const lines = hit.plainLyrics
         .split('\n')
-        .map((x: string) => x.trim())
+        .map((x: string) => x.replace(/\[\d+:\d+(?:\.\d+)?\]/g, '').trim())
         .filter(Boolean)
         .map((x: string) => ({ t: 0, x }));
       return { type: 'plain', lines, lyrics: hit.plainLyrics };

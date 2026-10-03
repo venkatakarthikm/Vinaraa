@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { PanInfo } from 'framer-motion';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import {
   ChevronDown, ChevronUp, EllipsisVertical, Heart, Play, Pause, SkipBack, SkipForward,
   Shuffle, Repeat, Repeat1, Headphones, Timer, Gauge, ListMusic, Palette,
-  FolderPlus, Download, Disc3, Mic2, Info, Check, Type
+  FolderPlus, Download, Disc3, Mic2, Info, Check, Image as ImageIcon
 } from 'lucide-react';
 import { usePlayerStore } from '@/store/player';
 import type { Song } from '@/store/player';
@@ -30,7 +30,7 @@ function formatTime(ms: number) {
 }
 
 const STYLES_LIST: { id: PlayerStyle; name: string; desc: string }[] = [
-  { id: 'cinematic', name: 'Cinematic', desc: 'Full ambient artwork backdrop' },
+  { id: 'cinematic', name: 'Cinematic', desc: 'Full poster art with ambient glow' },
   { id: 'glass', name: 'Glass', desc: 'Floating art on a frosted panel' },
   { id: 'vinyl', name: 'Vinyl', desc: 'A spinning record with a tonearm' },
   { id: 'classic', name: 'Classic', desc: 'Clean and minimal' },
@@ -39,13 +39,22 @@ const STYLES_LIST: { id: PlayerStyle; name: string; desc: string }[] = [
 
 const normalizeLyrics = (raw: any) => {
   if (!raw) return null;
-  if (Array.isArray(raw.lines) && raw.lines.length) return raw;
+  if (Array.isArray(raw.lines) && raw.lines.length) {
+    const cleaned = raw.lines.map((line: any) => {
+      const text = typeof line === 'string' ? line : line.x || line.text || '';
+      const cleanText = text.replace(/\[\d+:\d+(?:\.\d+)?\]/g, '').trim();
+      return { t: line.t || 0, x: cleanText || '♪' };
+    }).filter((l: any) => l.x);
+    return { type: raw.type || 'synced', lines: cleaned };
+  }
   const text =
     typeof raw.lyrics === 'string' ? raw.lyrics :
     typeof raw.lyrics?.lyrics === 'string' ? raw.lyrics.lyrics : '';
   if (!text.trim()) return null;
   const lines = text.replace(/<br\s*\/?>/gi, '\n').split('\n')
-    .map((x: string) => x.trim()).filter(Boolean).map((x: string) => ({ t: 0, x }));
+    .map((x: string) => x.replace(/\[\d+:\d+(?:\.\d+)?\]/g, '').trim())
+    .filter(Boolean)
+    .map((x: string) => ({ t: 0, x }));
   return lines.length ? { type: 'plain', lines } : null;
 };
 
@@ -95,11 +104,13 @@ export default function FullPlayer() {
 
   // Lyrics data
   const [lyricsData, setLyricsData] = useState<any>(null);
-  const [lyricsFontSize, setLyricsFontSize] = useState<number>(22);
 
   // Dragging seek bar
   const [draggingSeek, setDraggingSeek] = useState(false);
   const [seekFraction, setSeekFraction] = useState(0);
+
+  // Ref for active lyric line auto-scroll
+  const activeLyricRef = useRef<HTMLParagraphElement | null>(null);
 
   useEffect(() => {
     if (song?.id) {
@@ -143,6 +154,29 @@ export default function FullPlayer() {
     setPlayerInfoOpen(infoOpen);
   }, [infoOpen, setPlayerInfoOpen]);
 
+  // Compute active lyric line index based on positionMs
+  const currentSec = positionMs / 1000;
+  const lines: any[] = lyricsData?.lines || [];
+  let activeLyricIdx = -1;
+
+  if (lines.length > 0) {
+    for (let i = 0; i < lines.length; i++) {
+      const lineTime = lines[i].t || 0;
+      const nextTime = lines[i + 1] ? lines[i + 1].t : Infinity;
+      if (currentSec >= lineTime && currentSec < nextTime) {
+        activeLyricIdx = i;
+        break;
+      }
+    }
+  }
+
+  // Auto-scroll active lyric line to center
+  useEffect(() => {
+    if (lyricsOpen && activeLyricRef.current) {
+      activeLyricRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [activeLyricIdx, lyricsOpen]);
+
   if (!song) {
     return (
       <div className="flex flex-col h-full bg-bg items-center justify-center p-5 text-center">
@@ -179,7 +213,7 @@ export default function FullPlayer() {
     setDraggingSeek(false);
   };
 
-  const activeStyle = (playerStyle === 'lyrics' && !lyricsData?.lines?.length) ? 'cinematic' : playerStyle;
+  const activeStyle = playerStyle;
 
   // Gestures for Art Zone
   const handleArtDragEnd = (_: any, info: PanInfo) => {
@@ -190,7 +224,8 @@ export default function FullPlayer() {
       if (dy < -80 || info.velocity.y < -500) {
         setLyricsOpen(true);
       } else if (dy > 100 || info.velocity.y > 600) {
-        navigate(-1);
+        if (lyricsOpen) setLyricsOpen(false);
+        else navigate(-1);
       }
     } else {
       if (dx < -60) nextTrack();
@@ -210,15 +245,17 @@ export default function FullPlayer() {
 
   return (
     <div className="relative w-full h-full bg-bg overflow-hidden flex flex-col justify-between select-none">
-      {/* Background for Cinematic & Glass styles */}
+      {/* Background for Cinematic & Glass Styles: Full Ambient Blur */}
       {(activeStyle === 'cinematic' || activeStyle === 'glass') && (
         <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
-          {song.image && (
+          {song.image ? (
             <img
               src={song.image}
               alt=""
-              className="absolute inset-0 w-[150%] h-[150%] -left-[25%] -top-[25%] object-cover blur-3xl opacity-50 transition-all duration-500"
+              className="absolute inset-0 w-[160%] h-[160%] -left-[30%] -top-[30%] object-cover blur-3xl opacity-45 transition-all duration-500"
             />
+          ) : (
+            <div className="w-full h-full bg-surface-2 flex items-center justify-center text-muted">🎵</div>
           )}
           <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/25 to-bg" />
         </div>
@@ -228,7 +265,7 @@ export default function FullPlayer() {
       <header className="relative z-20 flex items-center justify-between px-4 pt-[calc(var(--sat)+8px)] h-[48px]">
         <button
           onClick={() => navigate(-1)}
-          className="w-11 h-11 rounded-full bg-black/35 backdrop-blur-md flex items-center justify-center text-white shadow-sm"
+          className="w-11 h-11 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center text-white shadow-md active:scale-95 transition-transform"
           aria-label="Collapse player"
         >
           <ChevronDown size={28} />
@@ -243,91 +280,124 @@ export default function FullPlayer() {
 
         <button
           onClick={() => setOptionsOpen(true)}
-          className="w-11 h-11 rounded-full bg-black/35 backdrop-blur-md flex items-center justify-center text-white shadow-sm"
+          className="w-11 h-11 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center text-white shadow-md active:scale-95 transition-transform"
           aria-label="Player options"
         >
           <EllipsisVertical size={22} />
         </button>
       </header>
 
-      {/* ZONE B: ART ZONE */}
+      {/* ZONE B: ART OR LYRICS STAGE ZONE */}
       <motion.div
         drag
         dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
         dragElastic={0.3}
         onDragEnd={handleArtDragEnd}
-        className="relative z-10 flex-1 flex items-center justify-center px-6 py-4 cursor-grab active:cursor-grabbing"
+        className="relative z-10 flex-1 flex items-center justify-center px-6 py-4 cursor-grab active:cursor-grabbing overflow-hidden"
       >
-        {/* Style 1: Cinematic */}
-        {activeStyle === 'cinematic' && (
-          <div className="w-[310px] h-[310px] rounded-[28px] overflow-hidden bg-surface-2 shadow-2xl border border-white/15 relative">
-            {song.image ? (
-              <motion.img
-                layoutId="player-art"
-                src={song.image}
-                alt={song.name}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <div className="w-full h-full bg-surface-2 flex items-center justify-center text-muted">🎵</div>
-            )}
-          </div>
-        )}
-
-        {/* Style 2: Glass Card */}
-        {activeStyle === 'glass' && (
-          <div className="relative w-[280px] h-[280px] rounded-[32px] overflow-hidden shadow-2xl border border-white/20">
-            {song.image ? (
-              <motion.img
-                layoutId="player-art"
-                src={song.image}
-                alt={song.name}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <div className="w-full h-full bg-surface-2 flex items-center justify-center text-muted">🎵</div>
-            )}
-          </div>
-        )}
-
-        {/* Style 3: Vinyl */}
-        {activeStyle === 'vinyl' && (
-          <div className="relative w-[296px] h-[296px] flex items-center justify-center">
-            <motion.div
-              animate={{ rotate: isPlaying ? 360 : 0 }}
-              transition={{ duration: 12, ease: 'linear', repeat: Infinity }}
-              className="w-[296px] h-[296px] rounded-full bg-[#0B0B0D] border-[6px] border-[#16161A] shadow-2xl flex items-center justify-center relative overflow-hidden"
-            >
-              <div className="w-[112px] h-[112px] rounded-full overflow-hidden border-[8px] border-bg relative flex items-center justify-center">
-                {song.image && <img src={song.image} alt="" className="w-full h-full object-cover" />}
-                <div className="w-2 h-2 rounded-full bg-bg absolute" />
-              </div>
-            </motion.div>
-          </div>
-        )}
-
-        {/* Style 4: Classic Minimal */}
-        {activeStyle === 'classic' && (
-          <div className="w-[320px] h-[320px] rounded-[20px] overflow-hidden bg-surface-2 shadow-2xl">
-            {song.image && <img src={song.image} alt={song.name} className="w-full h-full object-cover" />}
-          </div>
-        )}
-
-        {/* Style 5: Lyrics Stage */}
-        {activeStyle === 'lyrics' && (
-          <div className="w-full h-full flex flex-col justify-center overflow-y-auto px-4 text-center">
-            {Array.isArray(lyricsData?.lines) && lyricsData.lines.length > 0 ? (
-              <div className="flex flex-col gap-4 py-8">
-                {lyricsData.lines.map((line: any, idx: number) => (
-                  <p key={idx} className="t-lyric text-[22px] font-bold text-text/80">
-                    {line.x || line.text}
-                  </p>
-                ))}
+        {/* IN-PLACE LYRICS STAGE */}
+        {lyricsOpen ? (
+          <div className="w-full h-full max-h-[360px] flex flex-col items-center overflow-y-auto no-scrollbar py-6 px-3 text-center">
+            {lines.length > 0 ? (
+              <div className="flex flex-col gap-6 my-auto py-12">
+                {lines.map((line: any, idx: number) => {
+                  const isActive = idx === activeLyricIdx;
+                  return (
+                    <p
+                      key={idx}
+                      ref={isActive ? activeLyricRef : null}
+                      className={`transition-all duration-300 ${
+                        isActive
+                          ? 't-lyric-active text-[24px] font-extrabold text-primary scale-105'
+                          : 't-lyric text-[17px] font-semibold text-muted/65'
+                      }`}
+                    >
+                      {line.x}
+                    </p>
+                  );
+                })}
               </div>
             ) : (
-              <p className="t-body text-muted">Lyrics aren't available for this song</p>
+              <div className="my-auto text-center py-12">
+                <p className="t-body text-muted">Lyrics aren't available for this song</p>
+              </div>
             )}
           </div>
+        ) : (
+          /* ARTWORK STYLES */
+          <>
+            {/* Style 1: Cinematic (Full width uncropped poster card with ambient glow) */}
+            {activeStyle === 'cinematic' && (
+              <div className="w-full max-w-[340px] aspect-square rounded-[32px] overflow-hidden bg-surface-2 shadow-2xl border border-white/20 relative">
+                {song.image ? (
+                  <motion.img
+                    layoutId="player-art"
+                    src={song.image}
+                    alt={song.name}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full bg-surface-2 flex items-center justify-center text-muted">🎵</div>
+                )}
+              </div>
+            )}
+
+            {/* Style 2: Glass Card */}
+            {activeStyle === 'glass' && (
+              <div className="relative w-[280px] h-[280px] rounded-[32px] overflow-hidden shadow-2xl border border-white/20">
+                {song.image ? (
+                  <motion.img
+                    layoutId="player-art"
+                    src={song.image}
+                    alt={song.name}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full bg-surface-2 flex items-center justify-center text-muted">🎵</div>
+                )}
+              </div>
+            )}
+
+            {/* Style 3: Vinyl */}
+            {activeStyle === 'vinyl' && (
+              <div className="relative w-[296px] h-[296px] flex items-center justify-center">
+                <motion.div
+                  animate={{ rotate: isPlaying ? 360 : 0 }}
+                  transition={{ duration: 12, ease: 'linear', repeat: Infinity }}
+                  className="w-[296px] h-[296px] rounded-full bg-[#0B0B0D] border-[6px] border-[#16161A] shadow-2xl flex items-center justify-center relative overflow-hidden"
+                >
+                  <div className="w-[112px] h-[112px] rounded-full overflow-hidden border-[8px] border-bg relative flex items-center justify-center">
+                    {song.image && <img src={song.image} alt="" className="w-full h-full object-cover" />}
+                    <div className="w-2 h-2 rounded-full bg-bg absolute" />
+                  </div>
+                </motion.div>
+              </div>
+            )}
+
+            {/* Style 4: Classic Minimal */}
+            {activeStyle === 'classic' && (
+              <div className="w-[300px] h-[300px] rounded-[20px] overflow-hidden bg-surface-2 shadow-2xl">
+                {song.image && <img src={song.image} alt={song.name} className="w-full h-full object-cover" />}
+              </div>
+            )}
+
+            {/* Style 5: Lyrics Stage */}
+            {activeStyle === 'lyrics' && (
+              <div className="w-full h-full flex flex-col justify-center overflow-y-auto px-4 text-center">
+                {lines.length > 0 ? (
+                  <div className="flex flex-col gap-4 py-8">
+                    {lines.map((line: any, idx: number) => (
+                      <p key={idx} className="t-lyric text-[20px] font-bold text-text/80">
+                        {line.x}
+                      </p>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="t-body text-muted">Lyrics aren't available for this song</p>
+                )}
+              </div>
+            )}
+          </>
         )}
       </motion.div>
 
@@ -339,13 +409,22 @@ export default function FullPlayer() {
         onDragEnd={handleControlsDragEnd}
         className="relative z-10 flex flex-col gap-3 px-6 pb-[calc(var(--sab)+12px)]"
       >
-        {/* SWIPE UP FOR LYRICS INDICATOR */}
+        {/* SWIPE UP / TOGGLE LYRICS INDICATOR */}
         <button
-          onClick={() => setLyricsOpen(true)}
+          onClick={() => setLyricsOpen(!lyricsOpen)}
           className="self-center flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-surface-2/80 backdrop-blur-md border border-line/40 text-muted hover:text-text active:scale-95 transition-all cursor-pointer shadow-sm"
         >
-          <ChevronUp size={14} className="text-primary animate-bounce" />
-          <span className="t-micro text-[11px] font-bold uppercase tracking-wider">Swipe up for lyrics</span>
+          {lyricsOpen ? (
+            <>
+              <ImageIcon size={14} className="text-primary" />
+              <span className="t-micro text-[11px] font-bold uppercase tracking-wider">Show artwork</span>
+            </>
+          ) : (
+            <>
+              <ChevronUp size={14} className="text-primary animate-bounce" />
+              <span className="t-micro text-[11px] font-bold uppercase tracking-wider">Swipe up for lyrics</span>
+            </>
+          )}
         </button>
 
         {/* ZONE C: INFO ROW */}
@@ -617,59 +696,6 @@ export default function FullPlayer() {
           </Button>
         </div>
       </Sheet>
-
-      {/* LYRICS PANEL OVERLAY */}
-      <AnimatePresence>
-        {lyricsOpen && (
-          <motion.div
-            initial={{ y: '100%' }}
-            animate={{ y: 0 }}
-            exit={{ y: '100%' }}
-            transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-            className="fixed inset-0 z-[60] bg-bg/95 backdrop-blur-xl flex flex-col p-6 max-w-[480px] mx-auto"
-          >
-            <div className="flex items-center justify-between pb-4 border-b border-line">
-              <h2 className="t-h2 text-[20px] font-bold text-text">Lyrics</h2>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setLyricsFontSize((s) => (s >= 28 ? 20 : s + 4))}
-                  className="w-10 h-10 rounded-full bg-surface-2 flex items-center justify-center text-text"
-                  aria-label="Font size"
-                >
-                  <Type size={18} />
-                </button>
-                <button
-                  onClick={() => setLyricsOpen(false)}
-                  className="w-10 h-10 rounded-full bg-surface-2 flex items-center justify-center text-text"
-                  aria-label="Close lyrics"
-                >
-                  <ChevronDown size={22} />
-                </button>
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto py-6 text-center">
-              {Array.isArray(lyricsData?.lines) && lyricsData.lines.length > 0 ? (
-                <div className="flex flex-col gap-5 py-12">
-                  {lyricsData.lines.map((line: any, idx: number) => (
-                    <p
-                      key={idx}
-                      style={{ fontSize: `${lyricsFontSize}px` }}
-                      className="font-bold text-text/85 leading-relaxed"
-                    >
-                      {line.x || line.text}
-                    </p>
-                  ))}
-                </div>
-              ) : (
-                <div className="py-20 text-center">
-                  <p className="t-body text-muted">Lyrics aren't available for this song</p>
-                </div>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* SONG INFO SHEET (§8.8) */}
       <Sheet

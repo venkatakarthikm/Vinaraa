@@ -117,7 +117,11 @@ class VinaraaPlayerPlugin : Plugin() {
 
                         override fun onIsPlayingChanged(isPlaying: Boolean) {
                             progressHandler.post {
-                                val event = JSObject().apply { put("isPlaying", isPlaying) }
+                                val event = JSObject().apply {
+                                    put("isPlaying", isPlaying)
+                                    put("songId", player?.currentMediaItem?.mediaId)
+                                    put("positionMs", player?.currentPosition ?: 0L)
+                                }
                                 notifyListeners("playbackStateChanged", event)
                             }
                         }
@@ -179,19 +183,18 @@ class VinaraaPlayerPlugin : Plugin() {
         progressRunnable = object : Runnable {
             override fun run() {
                 player?.let { p ->
-                    if (p.isPlaying) {
-                        val event = JSObject().apply {
-                            put("songId", p.currentMediaItem?.mediaId)
-                            put("index", p.currentMediaItemIndex)
-                            put("positionMs", p.currentPosition)
-                            put("durationMs", if (p.duration == androidx.media3.common.C.TIME_UNSET) -1L else p.duration)
-                            put("bufferedMs", p.bufferedPosition)
-                            put("state", p.playbackState)
-                        }
-                        notifyListeners("progress", event)
+                    val event = JSObject().apply {
+                        put("songId", p.currentMediaItem?.mediaId)
+                        put("index", p.currentMediaItemIndex)
+                        put("positionMs", p.currentPosition)
+                        put("durationMs", if (p.duration == androidx.media3.common.C.TIME_UNSET || p.duration <= 0L) -1L else p.duration)
+                        put("bufferedMs", p.bufferedPosition)
+                        put("isPlaying", p.isPlaying)
+                        put("state", p.playbackState)
                     }
+                    notifyListeners("progress", event)
                 }
-                progressHandler.postDelayed(this, 500)
+                progressHandler.postDelayed(this, 250)
             }
         }
         progressHandler.post(progressRunnable!!)

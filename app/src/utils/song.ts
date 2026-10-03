@@ -20,12 +20,15 @@ export function formatPlayerSong(song: any) {
     (Array.isArray(song?.downloadUrl) && song.downloadUrl[song.downloadUrl.length - 1]?.url) ||
     '';
 
+  const rawMs = song?.durationMs || (song?.duration ? song.duration * 1000 : 0);
+  const durationMs = rawMs > 0 && rawMs < 10000 ? rawMs * 1000 : rawMs;
+
   return {
     id: songId,
     name: song?.name || song?.title || 'Unknown Song',
     artist: getArtistsText(song),
     image: getSongImage(song),
-    durationMs: song?.durationMs || (song?.duration ? song.duration * 1000 : 0),
+    durationMs,
     album: song?.album?.name || song?.album,
     albumId: song?.album?.id || song?.albumId,
     language: song?.language,
