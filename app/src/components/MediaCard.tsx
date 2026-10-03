@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Play, Disc3, Mic2, ListMusic } from 'lucide-react';
 
@@ -26,6 +27,7 @@ export function MediaCard({
   onPlayClick,
   className = '',
 }: MediaCardProps) {
+  const [imgError, setImgError] = useState(false);
   const showPlayFab = type === 'song' || type === 'album' || type === 'playlist';
 
   return (
@@ -35,19 +37,20 @@ export function MediaCard({
       className={`flex flex-col flex-shrink-0 cursor-pointer group ${className}`}
       style={{ width: typeof width === 'number' ? `${width}px` : width }}
     >
-      <div className="relative w-full aspect-square rounded-[20px] overflow-hidden bg-surface-2 shadow-sm">
-        {image ? (
+      <div className="relative w-full aspect-square rounded-[20px] overflow-hidden bg-surface-2 shadow-sm flex items-center justify-center">
+        {image && !imgError ? (
           <motion.img
             layoutId={`art-${type}-${id}`}
             src={image}
             alt={title}
+            onError={() => setImgError(true)}
             className="w-full h-full object-cover"
             loading="lazy"
             decoding="async"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-muted">
-            <Disc3 size={32} />
+          <div className="w-full h-full flex flex-col items-center justify-center text-muted bg-gradient-to-br from-surface-2 to-surface-3">
+            {type === 'artist' ? <Mic2 size={36} /> : type === 'playlist' ? <ListMusic size={36} /> : <Disc3 size={36} />}
           </div>
         )}
 
@@ -110,6 +113,8 @@ export function ArtistCircle({
   onClick,
   className = '',
 }: ArtistCircleProps) {
+  const [imgError, setImgError] = useState(false);
+
   return (
     <motion.div
       onClick={onClick}
@@ -118,20 +123,21 @@ export function ArtistCircle({
       style={{ width: `${size}px` }}
     >
       <div
-        className="rounded-full overflow-hidden bg-surface-2 shadow-sm border-2 border-transparent active:border-primary transition-colors"
+        className="rounded-full overflow-hidden bg-surface-2 shadow-sm border-2 border-transparent active:border-primary transition-colors flex items-center justify-center"
         style={{ width: `${size}px`, height: `${size}px` }}
       >
-        {image ? (
+        {image && !imgError ? (
           <motion.img
             layoutId={`art-artist-${id}`}
             src={image}
             alt={name}
+            onError={() => setImgError(true)}
             className="w-full h-full object-cover"
             loading="lazy"
             decoding="async"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-muted">
+          <div className="w-full h-full flex items-center justify-center text-muted bg-gradient-to-br from-surface-2 to-surface-3">
             <Mic2 size={32} />
           </div>
         )}

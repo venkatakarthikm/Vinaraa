@@ -85,12 +85,15 @@ export default function Home() {
     <div className="relative w-full h-full bg-bg">
       {/* Scrollable Container */}
       <div className="absolute inset-0 overflow-y-auto overscroll-contain pb-[var(--bottom-chrome)]">
-        {/* Top Bar (y+12, h 56) */}
-        <header className="flex items-center justify-between px-5 pt-[calc(var(--sat)+12px)] h-[56px] sticky top-0 z-10 bg-bg/90 backdrop-blur-md">
+        {/* Top Bar (Sticky, Safe area padded) */}
+        <header
+          className="flex items-center justify-between px-5 sticky top-0 z-20 bg-bg/95 backdrop-blur-md border-b border-line/30"
+          style={{ paddingTop: 'calc(var(--sat) + 8px)', paddingBottom: '8px' }}
+        >
           {/* Avatar (44x44) */}
           <button
             onClick={() => navigate('/profile')}
-            className="w-[44px] h-[44px] rounded-full overflow-hidden bg-gradient-to-br from-primary to-accent flex items-center justify-center text-on-primary font-bold t-h3 shadow-sm"
+            className="w-[44px] h-[44px] rounded-full overflow-hidden bg-gradient-to-br from-primary to-accent flex items-center justify-center text-on-primary font-bold t-h3 shadow-sm flex-shrink-0"
           >
             {user?.avatarUrl ? (
               <img src={user.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
@@ -100,10 +103,10 @@ export default function Home() {
           </button>
 
           {/* Greeting Block */}
-          <div className="flex-1 px-3">
-            <p className="t-cap text-[13px] text-muted leading-tight">{getGreetingText()}</p>
+          <div className="flex-1 px-3 min-w-0">
+            <p className="t-cap text-[12px] text-muted leading-tight">{getGreetingText()}</p>
             {firstName ? (
-              <h2 className="t-h2 text-[20px] font-bold text-text truncate leading-tight">
+              <h2 className="t-h2 text-[18px] font-bold text-text truncate leading-tight">
                 {firstName}
               </h2>
             ) : (
@@ -112,7 +115,7 @@ export default function Home() {
           </div>
 
           {/* Right Icon Buttons (Bell & Settings) */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0">
             <button
               onClick={() => setNotificationsOpen(true)}
               className="w-10 h-10 rounded-full bg-surface-2 flex items-center justify-center text-text"
@@ -131,7 +134,7 @@ export default function Home() {
         </header>
 
         {/* Content Width Centered */}
-        <main className="w-full max-w-[480px] mx-auto flex flex-col gap-7 pt-4">
+        <main className="w-full max-w-[480px] mx-auto flex flex-col gap-6 pt-4">
           {/* Banner Carousel (Slim h 148) */}
           <section className="px-5">
             {loading ? (
@@ -163,7 +166,7 @@ export default function Home() {
                               Made for you
                             </span>
                           </div>
-                          <h2 className="t-h2 text-[20px] font-extrabold text-white line-clamp-2 mt-1">
+                          <h2 className="t-h2 text-[18px] font-extrabold text-white line-clamp-2 mt-1">
                             {rail.title}
                           </h2>
                           {rail.subtitle && (
@@ -178,9 +181,9 @@ export default function Home() {
                             e.stopPropagation();
                             handlePlayRail(rail);
                           }}
-                          className="h-[40px] px-4 rounded-full bg-primary text-on-primary flex items-center gap-2 t-cap text-[13px] font-bold shadow-md active:scale-95 transition-transform"
+                          className="h-[36px] px-4 rounded-full bg-primary text-on-primary flex items-center gap-2 t-cap text-[12px] font-bold shadow-md active:scale-95 transition-transform"
                         >
-                          <Play size={18} fill="currentColor" />
+                          <Play size={16} fill="currentColor" />
                           <span>Play</span>
                         </button>
                       </div>

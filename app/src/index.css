@@ -149,8 +149,8 @@
 
 /* Safe areas & Chrome Dimensions */
 :root {
-  --sat: env(safe-area-inset-top, 0px);
-  --sab: env(safe-area-inset-bottom, 0px);
+  --sat: max(env(safe-area-inset-top, 0px), 36px);
+  --sab: max(env(safe-area-inset-bottom, 0px), 12px);
   --has-mini: 1;
   --has-strip: 0;
   --bottom-chrome: calc(64px + 8px + var(--sab) + 8px + (var(--has-mini) * 64px) + (var(--has-strip) * 56px) + 16px);

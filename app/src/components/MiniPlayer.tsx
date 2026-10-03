@@ -2,6 +2,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { usePlayerStore } from '@/store/player';
 import { useProgressStore } from '@/store/progress';
+import { useUIStore } from '@/store/ui';
 import { Play, Pause, SkipForward, Disc3 } from 'lucide-react';
 import { springs } from '@/motion';
 import Marquee from './Marquee';
@@ -10,6 +11,7 @@ import { useShallow } from 'zustand/react/shallow';
 export default function MiniPlayer() {
   const location = useLocation();
   const navigate = useNavigate();
+  const sheets = useUIStore((s) => s.sheets);
 
   const { queue, currentIndex, isPlaying, togglePlay, nextTrack } = usePlayerStore(
     useShallow((s) => ({
@@ -32,7 +34,8 @@ export default function MiniPlayer() {
   const song = queue[currentIndex];
   const progress = durationMs > 0 ? positionMs / durationMs : 0;
 
-  if (!song) return null;
+  // Hide mini player when a bottom sheet is open or no song
+  if (!song || sheets.length > 0) return null;
 
   const path = location.pathname;
   // Compact CD mode on detail pages & search screen so it never covers inputs / filters
@@ -48,15 +51,18 @@ export default function MiniPlayer() {
   return (
     <AnimatePresence mode="wait">
       {isCompactMode ? (
-        /* Rotating CD / Vinyl Mini Player Badge */
+        /* Draggable Rotating CD / Vinyl Mini Player Badge */
         <motion.div
           key="compact-cd"
+          drag
+          dragConstraints={{ left: -320, right: 10, top: -650, bottom: 10 }}
+          dragElastic={0.2}
           initial={{ scale: 0, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0, opacity: 0 }}
           transition={springs.snappy}
           onClick={() => navigate('/player')}
-          className="fixed right-4 z-40 w-[58px] h-[58px] cursor-pointer"
+          className="fixed right-4 z-40 w-[58px] h-[58px] cursor-grab active:cursor-grabbing select-none"
           style={{ bottom: 'calc(var(--sab) + 64px + 12px)' }}
         >
           <div className="relative w-full h-full rounded-full bg-[#0B0B0D] border-[2px] border-line shadow-2xl flex items-center justify-center overflow-hidden">
@@ -64,13 +70,13 @@ export default function MiniPlayer() {
             <motion.div
               animate={{ rotate: isPlaying ? 360 : 0 }}
               transition={{ duration: 8, ease: 'linear', repeat: Infinity }}
-              className="w-full h-full rounded-full overflow-hidden flex items-center justify-center p-1"
+              className="w-full h-full rounded-full overflow-hidden flex items-center justify-center p-1 pointer-events-none"
             >
               {song.image ? (
                 <img
                   src={song.image}
                   alt={song.name}
-                  className="w-full h-full object-cover rounded-full"
+                  className="w-full h-full object-cover rounded-full pointer-events-none"
                 />
               ) : (
                 <Disc3 size={32} className="text-muted" />
@@ -85,7 +91,7 @@ export default function MiniPlayer() {
                   e.stopPropagation();
                   togglePlay();
                 }}
-                className="pointer-events-auto w-6 h-6 rounded-full bg-black/60 backdrop-blur-xs flex items-center justify-center text-white border border-white/20 shadow-md"
+                className="pointer-events-auto w-6 h-6 rounded-full bg-black/60 backdrop-blur-xs flex items-center justify-center text-white border border-white/20 shadow-md active:scale-90 transition-transform"
               >
                 {isPlaying ? <Pause size={12} fill="white" /> : <Play size={12} fill="white" className="ml-0.5" />}
               </button>

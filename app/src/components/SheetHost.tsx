@@ -46,14 +46,14 @@ export function Sheet({
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[50] flex flex-col justify-end">
+        <div className="fixed inset-0 z-[70] flex flex-col justify-end">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
             onClick={onClose}
-            className="absolute inset-0 bg-black/50 backdrop-blur-xs"
+            className="absolute inset-0 bg-black/60 backdrop-blur-xs"
           />
 
           <motion.div
@@ -66,7 +66,7 @@ export function Sheet({
             dragElastic={0.2}
             onDragEnd={handleDragEnd}
             style={{ maxHeight }}
-            className="relative z-[51] w-full max-w-[480px] mx-auto bg-surface surface-glass rounded-t-[32px] border-t border-line px-5 pt-3 pb-[calc(var(--sab)+16px)] flex flex-col shadow-2xl overflow-hidden"
+            className="relative z-[71] w-full max-w-[480px] mx-auto bg-surface surface-glass rounded-t-[32px] border-t border-line px-5 pt-3 pb-[calc(var(--sab)+16px)] flex flex-col shadow-2xl overflow-hidden"
           >
             <div className="w-[36px] h-[4px] bg-line rounded-[2px] mx-auto mb-4 flex-shrink-0 cursor-grab active:cursor-grabbing" />
 

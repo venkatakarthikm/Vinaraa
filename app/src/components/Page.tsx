@@ -29,8 +29,8 @@ export default function Page({
     if (onScroll) onScroll(top);
   };
 
-  const isScrolledTab = isTabRoot && scrollTop > 24;
-  const isScrolledDetail = !isTabRoot && scrollTop > 160;
+  const isScrolledTab = isTabRoot && scrollTop > 16;
+  const isScrolledDetail = !isTabRoot && scrollTop > 120;
 
   return (
     <div
@@ -41,16 +41,15 @@ export default function Page({
       {/* Header for Tab Root */}
       {isTabRoot && title && (
         <header
-          className={`sticky top-0 z-10 flex items-center justify-between px-5 transition-all duration-180 ${
-            isScrolledTab
-              ? 'bg-surface/88 backdrop-blur-md border-b border-line h-14'
-              : 'bg-transparent h-14 pt-[calc(var(--sat)+12px)]'
+          className={`sticky top-0 z-20 flex items-center justify-between px-5 transition-all duration-180 bg-bg/95 backdrop-blur-md ${
+            isScrolledTab ? 'border-b border-line shadow-sm' : ''
           }`}
+          style={{ paddingTop: 'calc(var(--sat) + 8px)', paddingBottom: '8px' }}
         >
           <h1
             className="t-h1 transition-transform origin-left duration-180"
             style={{
-              transform: isScrolledTab ? 'scale(0.72)' : 'scale(1)',
+              transform: isScrolledTab ? 'scale(0.85)' : 'scale(1)',
             }}
           >
             {title}
@@ -62,21 +61,15 @@ export default function Page({
       {/* Header for Detail Page */}
       {!isTabRoot && (
         <header
-          className={`fixed top-0 left-0 right-0 z-10 flex items-center justify-between px-3 h-14 transition-all duration-200 ${
-            isScrolledDetail
-              ? 'bg-surface/92 backdrop-blur-md border-b border-line'
-              : 'bg-transparent'
+          className={`sticky top-0 left-0 right-0 z-20 flex items-center justify-between px-3 transition-all duration-200 bg-bg/95 backdrop-blur-md ${
+            isScrolledDetail ? 'border-b border-line shadow-sm' : ''
           }`}
-          style={{ paddingTop: 'calc(var(--sat) + 8px)' }}
+          style={{ paddingTop: 'calc(var(--sat) + 8px)', paddingBottom: '8px' }}
         >
           <button
             onClick={() => navigate(-1)}
             aria-label="Back"
-            className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
-              isScrolledDetail
-                ? 'bg-surface-2 text-text'
-                : 'bg-black/40 backdrop-blur-sm text-white'
-            }`}
+            className="w-10 h-10 rounded-full bg-surface-2 text-text flex items-center justify-center transition-colors"
           >
             <ChevronLeft size={22} />
           </button>
