@@ -5,7 +5,7 @@ const mongoose = require('mongoose');
 const { asyncHandler } = require('../utils/async');
 const { ok, created } = require('../utils/apiResponse');
 const { validate } = require('../middleware/validate');
-const { requireAdminKey } = require('../middleware/auth');
+const { authenticate, requireAdminKey } = require('../middleware/auth');
 const pool = require('../services/upstreamPool');
 const cache = require('../services/cache');
 const db = require('../config/db');
@@ -23,6 +23,7 @@ const { NotificationTemplate, NotificationCampaign } = require('../models/Notifi
 const s = require('../validators/schemas');
 
 const router = express.Router();
+router.use(authenticate);
 
 /* ── upstream pool ───────────────────────────────────────────── */
 router.get(

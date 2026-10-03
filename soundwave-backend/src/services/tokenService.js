@@ -11,6 +11,7 @@ function signAccessToken(user) {
     {
       sub: String(user._id),
       email: user.email,
+      name: user.name,
       role: user.role,
       tv: user.security?.tokenVersion || 0,
     },

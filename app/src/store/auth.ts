@@ -15,6 +15,22 @@ export interface User {
 
 export type AuthStatus = 'idle' | 'checking' | 'authenticated' | 'unauthenticated';
 
+function parseJwt(token: string) {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(jsonPayload);
+  } catch (_e) {
+    return null;
+  }
+}
+
 interface AuthState {
   authStatus: AuthStatus;
   isAuthenticated: boolean;
@@ -70,8 +86,18 @@ export const useAuthStore = create<AuthState>((set) => ({
       const cachedUser = storedUser ? JSON.parse(storedUser) : null;
 
       if (token && token.length > 0) {
-        if (cachedUser) {
-          set({ isAuthenticated: true, user: cachedUser, authStatus: 'authenticated' });
+        const jwtPayload = parseJwt(token);
+        const tokenUser = jwtPayload?.name ? {
+          id: jwtPayload.sub,
+          name: jwtPayload.name,
+          email: jwtPayload.email,
+          role: jwtPayload.role,
+        } : null;
+
+        const effectiveUser = cachedUser?.name ? cachedUser : (tokenUser || cachedUser);
+
+        if (effectiveUser) {
+          set({ isAuthenticated: true, user: effectiveUser as any, authStatus: 'authenticated' });
         }
 
         if (navigator.onLine) {
@@ -93,11 +119,15 @@ export const useAuthStore = create<AuthState>((set) => ({
                 set({ isAuthenticated: true, user: profile, authStatus: 'authenticated' });
               }
             } else if (res.status === 401) {
-              await useAuthStore.getState().logout({ reason: 'Your session ended. Please sign in again.' });
+              const json = await res.json().catch(() => ({}));
+              const errCode = json?.error?.code;
+              if (['TOKEN_INVALID', 'SESSION_REVOKED', 'USER_NOT_FOUND'].includes(errCode)) {
+                await useAuthStore.getState().logout({ reason: 'Your session ended. Please sign in again.' });
+              }
             }
           } catch (_e) {
-            if (cachedUser) {
-              set({ isAuthenticated: true, user: cachedUser, authStatus: 'authenticated' });
+            if (effectiveUser) {
+              set({ isAuthenticated: true, user: effectiveUser as any, authStatus: 'authenticated' });
             }
           }
         }
