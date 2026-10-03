@@ -32,6 +32,9 @@ export function setupOneSignal() {
       }
 
       os.initialize("c7594dd5-a376-4104-ac20-56abe4f1bf42");
+      os.Notifications?.requestPermission?.(true)?.then?.((granted: boolean) => {
+        console.log('[OneSignal] notification permission:', granted);
+      });
 
       const registerToken = (token: string) => {
         if (token) {
@@ -62,15 +65,15 @@ const queryClient = new QueryClient({
   },
 });
 
-const idbPersister = createIDBPersister();
+const persister = createIDBPersister();
 
 export default function App() {
   return (
-    <PersistQueryClientProvider client={queryClient} persistOptions={{ persister: idbPersister }}>
+    <PersistQueryClientProvider client={queryClient} persistOptions={{ persister }}>
       <BrowserRouter>
         <AmbientBackdrop />
-        <ToastContainer />
         <AppWrapper />
+        <ToastContainer />
       </BrowserRouter>
     </PersistQueryClientProvider>
   );
@@ -88,9 +91,18 @@ function AppWrapper() {
   useEffect(() => {
     startPlayerEngine();
     setupOneSignal();
-    getDeviceInfo().then(device => {
-      VinaraaPlayer.setConfig({ apiBase: API_BASE, deviceId: device.deviceId }).catch(console.error);
-    });
+
+    if (Capacitor.isNativePlatform()) {
+      VinaraaPlayer.requestPermissions({ notifications: true, media: false })
+        .then((st) => console.log('[Permissions]', st))
+        .catch((e) => console.warn('[Permissions] request failed', e));
+    }
+
+    getDeviceInfo()
+      .then((device: any) => device?.deviceId || 'unknown-' + Date.now())
+      .catch(() => 'unknown-' + Date.now())
+      .then((deviceId: string) => VinaraaPlayer.setConfig({ apiBase: API_BASE, deviceId })
+        .catch((e: any) => console.error('[setConfig] failed', e)));
 
     const handleOpenPlayer = () => {
       navigate('/player');
@@ -108,54 +120,25 @@ function AppWrapper() {
         return;
       }
 
-      // 2) On /player and lyrics panel or info sheet is open -> close it
-      if (path.startsWith('/player')) {
-        if (uiState.playerLyricsOpen || uiState.playerInfoOpen) {
-          if (uiState.playerLyricsOpen) uiState.setPlayerLyricsOpen(false);
-          if (uiState.playerInfoOpen) uiState.setPlayerInfoOpen(false);
-          return;
-        }
-        // 3) On /player otherwise -> minimise (navigate(-1))
-        if (window.history.length <= 1) {
-          navigate('/home', { replace: true });
-        } else {
-          navigate(-1);
-        }
-        return;
-      }
-
-      // 4) On any detail page -> navigate(-1)
-      if (
-        path.startsWith('/album/') ||
-        path.startsWith('/artist/') ||
-        path.startsWith('/playlist/') ||
-        path.startsWith('/profile') ||
-        path.startsWith('/settings') ||
-        path.startsWith('/downloads') ||
-        path.startsWith('/list/')
-      ) {
-        navigate(-1);
-        return;
-      }
-
-      // 5) On /search, /library, /stats -> go to /home
-      if (path === '/search' || path === '/library' || path === '/stats') {
-        navigate('/home');
-        return;
-      }
-
-      // 6) On /home, /welcome, / -> minimize app
-      if (path === '/home' || path === '/welcome' || path === '/') {
+      // 2) At a tab root route -> exit app
+      if (['/home', '/search', '/library', '/stats'].includes(path)) {
         CapacitorApp.minimizeApp();
         return;
       }
 
+      // 3) At Full Player -> close full player (navigate back)
+      if (path === '/player') {
+        navigate(-1);
+        return;
+      }
+
+      // 4) Inside any detail / push route -> navigate(-1)
       navigate(-1);
     });
 
     return () => {
       window.removeEventListener('openPlayerIntent', handleOpenPlayer);
-      listener.then((l: any) => l.remove());
+      listener.then((h) => h.remove());
     };
   }, [navigate]);
 

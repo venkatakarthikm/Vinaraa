@@ -24,6 +24,9 @@ export function startPlayerEngine() {
   started = true;
   const st = usePlayerStore;
 
+  // Push initial repeat mode to native player so UI and player agree
+  VinaraaPlayer.setRepeatMode({ mode: st.getState().repeat }).catch(() => {});
+
   const checkNotificationIntent = async () => {
     try {
       const res = await VinaraaPlayer.checkIntent();

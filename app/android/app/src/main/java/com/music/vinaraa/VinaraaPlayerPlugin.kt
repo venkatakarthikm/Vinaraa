@@ -11,15 +11,30 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.getcapacitor.JSObject
+import com.getcapacitor.PermissionState
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
+import com.getcapacitor.annotation.Permission
+import com.getcapacitor.annotation.PermissionCallback
 import com.google.common.util.concurrent.ListenableFuture
 import okio.buffer
 import okio.sink
 
-@CapacitorPlugin(name = "VinaraaPlayer")
+@CapacitorPlugin(
+    name = "VinaraaPlayer",
+    permissions = [
+        Permission(
+            alias = "notifications",
+            strings = ["android.permission.POST_NOTIFICATIONS"]
+        ),
+        Permission(
+            alias = "mediaAudio",
+            strings = ["android.permission.READ_MEDIA_AUDIO", "android.permission.READ_EXTERNAL_STORAGE"]
+        )
+    ]
+)
 class VinaraaPlayerPlugin : Plugin() {
 
     companion object {
@@ -63,6 +78,31 @@ class VinaraaPlayerPlugin : Plugin() {
             addAction(PlaybackService.ACTION_PREVIOUS)
         }
         ContextCompat.registerReceiver(context, mediaReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+    }
+
+    @PluginMethod
+    override fun requestPermissions(call: PluginCall) {
+        val wantNotifications = call.getBoolean("notifications", true) ?: true
+        val wantMedia = call.getBoolean("media", false) ?: false
+
+        if (wantNotifications && getPermissionState("notifications") != PermissionState.GRANTED) {
+            requestPermissionForAlias("notifications", call, "permCallback"); return
+        }
+        if (wantMedia && getPermissionState("mediaAudio") != PermissionState.GRANTED) {
+            requestPermissionForAlias("mediaAudio", call, "permCallback"); return
+        }
+        call.resolve(JSObject().apply {
+            put("notifications", getPermissionState("notifications").toString())
+            put("mediaAudio", getPermissionState("mediaAudio").toString())
+        })
+    }
+
+    @PermissionCallback
+    private fun permCallback(call: PluginCall) {
+        call.resolve(JSObject().apply {
+            put("notifications", getPermissionState("notifications").toString())
+            put("mediaAudio", getPermissionState("mediaAudio").toString())
+        })
     }
 
     private fun initPlayer() {

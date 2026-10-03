@@ -1,18 +1,20 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Play, Disc3, Mic2, ListMusic } from 'lucide-react';
+import { getMediaImage } from '@/utils/image';
 
 interface MediaCardProps {
   id: string;
   title: string;
   subtitle?: string;
-  image?: string;
+  image?: any;
   type?: 'song' | 'album' | 'artist' | 'playlist';
   width?: number | string;
   matchPercent?: number;
   onClick?: () => void;
   onPlayClick?: () => void;
   className?: string;
+  artwork?: any;
 }
 
 export function MediaCard({
@@ -26,8 +28,15 @@ export function MediaCard({
   onClick,
   onPlayClick,
   className = '',
+  artwork,
 }: MediaCardProps) {
   const [imgError, setImgError] = useState(false);
+  const resolved = getMediaImage({ image, artwork });
+
+  useEffect(() => {
+    setImgError(false);
+  }, [resolved]);
+
   const showPlayFab = type === 'song' || type === 'album' || type === 'playlist';
 
   return (
@@ -38,10 +47,10 @@ export function MediaCard({
       style={{ width: typeof width === 'number' ? `${width}px` : width }}
     >
       <div className="relative w-full aspect-square rounded-[20px] overflow-hidden bg-surface-2 shadow-sm flex items-center justify-center">
-        {image && !imgError ? (
+        {resolved && !imgError ? (
           <motion.img
             layoutId={`art-${type}-${id}`}
-            src={image}
+            src={resolved}
             alt={title}
             onError={() => setImgError(true)}
             className="w-full h-full object-cover"
@@ -99,10 +108,11 @@ export function MediaCard({
 interface ArtistCircleProps {
   id: string;
   name: string;
-  image?: string;
+  image?: any;
   size?: 88 | 96;
   onClick?: () => void;
   className?: string;
+  artwork?: any;
 }
 
 export function ArtistCircle({
@@ -112,8 +122,14 @@ export function ArtistCircle({
   size = 88,
   onClick,
   className = '',
+  artwork,
 }: ArtistCircleProps) {
   const [imgError, setImgError] = useState(false);
+  const resolved = getMediaImage({ image, artwork });
+
+  useEffect(() => {
+    setImgError(false);
+  }, [resolved]);
 
   return (
     <motion.div
@@ -126,10 +142,10 @@ export function ArtistCircle({
         className="rounded-full overflow-hidden bg-surface-2 shadow-sm border-2 border-transparent active:border-primary transition-colors flex items-center justify-center"
         style={{ width: `${size}px`, height: `${size}px` }}
       >
-        {image && !imgError ? (
+        {resolved && !imgError ? (
           <motion.img
             layoutId={`art-artist-${id}`}
-            src={image}
+            src={resolved}
             alt={name}
             onError={() => setImgError(true)}
             className="w-full h-full object-cover"

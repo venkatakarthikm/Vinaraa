@@ -21,6 +21,7 @@ import SaveToPlaylistSheet from '@/components/SaveToPlaylistSheet';
 import QueueSheet from '@/components/QueueSheet';
 import Button from '@/components/Button';
 import Chip from '@/components/Chip';
+import { getCachedLyrics, setCachedLyrics, fetchLrclib } from '@/utils/lyrics';
 
 function formatTime(ms: number) {
   if (!ms || isNaN(ms)) return '0:00';
@@ -35,6 +36,18 @@ const STYLES_LIST: { id: PlayerStyle; name: string; desc: string }[] = [
   { id: 'classic', name: 'Classic', desc: 'Clean and minimal' },
   { id: 'lyrics', name: 'Lyrics stage', desc: 'Lyrics first, controls tucked below' },
 ];
+
+const normalizeLyrics = (raw: any) => {
+  if (!raw) return null;
+  if (Array.isArray(raw.lines) && raw.lines.length) return raw;
+  const text =
+    typeof raw.lyrics === 'string' ? raw.lyrics :
+    typeof raw.lyrics?.lyrics === 'string' ? raw.lyrics.lyrics : '';
+  if (!text.trim()) return null;
+  const lines = text.replace(/<br\s*\/?>/gi, '\n').split('\n')
+    .map((x: string) => x.trim()).filter(Boolean).map((x: string) => ({ t: 0, x }));
+  return lines.length ? { type: 'plain', lines } : null;
+};
 
 export default function FullPlayer() {
   const navigate = useNavigate();
@@ -87,8 +100,35 @@ export default function FullPlayer() {
   useEffect(() => {
     if (song?.id) {
       playlists.isLiked(song.id).then((l) => setLiked(Boolean(l))).catch(() => {});
-      music.lyrics(song.id).then((lRes: any) => setLyricsData(lRes)).catch(() => setLyricsData(null));
     }
+  }, [song?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!song?.id) { setLyricsData(null); return; }
+
+    (async () => {
+      try {
+        const cached = await getCachedLyrics(song.id);
+        if (cached && !cancelled) setLyricsData(cached);
+      } catch {}
+
+      try {
+        const res = await music.lyrics(song.id);
+        const norm = normalizeLyrics(res);
+        if (norm && !cancelled) { setLyricsData(norm); setCachedLyrics(song.id, norm); return; }
+      } catch {}
+
+      try {
+        const primaryArtist = (song.artist || '').split(',')[0].trim();
+        const lrc = await fetchLrclib(song.name, primaryArtist, song.durationMs || 0);
+        if (cancelled) return;
+        if (lrc) { setLyricsData(lrc); setCachedLyrics(song.id, lrc); }
+        else setLyricsData(null);
+      } catch { if (!cancelled) setLyricsData(null); }
+    })();
+
+    return () => { cancelled = true; };
   }, [song?.id]);
 
   useEffect(() => {
@@ -269,7 +309,7 @@ export default function FullPlayer() {
         {/* Style 5: Lyrics Stage */}
         {activeStyle === 'lyrics' && (
           <div className="w-full h-full flex flex-col justify-center overflow-y-auto px-4 text-center">
-            {lyricsData?.lines ? (
+            {Array.isArray(lyricsData?.lines) && lyricsData.lines.length > 0 ? (
               <div className="flex flex-col gap-4 py-8">
                 {lyricsData.lines.map((line: any, idx: number) => (
                   <p key={idx} className="t-lyric text-[22px] font-bold text-text/70">
@@ -593,7 +633,7 @@ export default function FullPlayer() {
             </div>
 
             <div className="flex-1 overflow-y-auto py-6 text-center">
-              {lyricsData?.lines?.length > 0 ? (
+              {Array.isArray(lyricsData?.lines) && lyricsData.lines.length > 0 ? (
                 <div className="flex flex-col gap-5 py-12">
                   {lyricsData.lines.map((line: any, idx: number) => (
                     <p

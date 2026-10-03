@@ -147,6 +147,11 @@ export const stats = {
     const qs = params ? new URLSearchParams(params).toString() : '';
     return apiClient<any>(`/stats/history/sessions${qs ? `?${qs}` : ''}`);
   },
+  top: (params: { type: 'songs' | 'singers' | 'movies' | 'directors' | 'actors' | 'languages'; range?: string; limit?: number }) => {
+    const qs = new URLSearchParams(params as any).toString();
+    return apiClient<any>(`/stats/top?${qs}`);
+  },
+  recentlyPlayed: (limit = 30) => apiClient<any>(`/stats/recently-played?limit=${limit}`),
 };
 
 // ── Notifications ──────────────────────────────────────────────────────────

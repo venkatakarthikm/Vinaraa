@@ -23,21 +23,45 @@ export async function setCachedLyrics(songId: string, lyrics: any) {
   return db.put(STORE_NAME, lyrics, songId);
 }
 
-export async function fetchLrclib(songName: string, artistName: string, durationMs: number, abortSignal?: AbortSignal) {
-  const name = songName.replace(/\s*[\(\[].*?[\)\]]/g, '');
-  const url = `https://lrclib.net/api/search?track_name=${encodeURIComponent(name)}&artist_name=${encodeURIComponent(artistName)}`;
-  const res = await fetch(url, { signal: abortSignal });
-  if (!res.ok) throw new Error('Lyrics search failed');
-  const data = await res.json();
-  
-  // Prefer hits where duration matches within 3 seconds
+export async function fetchLrclib(
+  songName: string,
+  artistName: string,
+  durationMs: number,
+  abortSignal?: AbortSignal
+) {
+  const cleanTitle = songName
+    .replace(/\(From\s+"[^"]*"\)/gi, '')
+    .replace(/\((?:Telugu|Hindi|Tamil|Kannada|Malayalam|Bengali|Marathi|Punjabi|Gujarati|Odia|Bhojpuri|English)\)/gi, '')
+    .replace(/\s*[\(\[].*?[\)\]]/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+  const primaryArtist = (artistName || '').split(',')[0].trim();
+
+  const searchLrclib = async (titleToSearch: string) => {
+    const url = `https://lrclib.net/api/search?track_name=${encodeURIComponent(titleToSearch)}&artist_name=${encodeURIComponent(primaryArtist)}`;
+    const res = await fetch(url, {
+      signal: abortSignal,
+      headers: { 'user-agent': 'Vinaraa/1.0 (https://vinaraa.onrender.com)' },
+    });
+    if (!res.ok) return null;
+    return res.json();
+  };
+
+  let data = await searchLrclib(cleanTitle || songName).catch(() => null);
+
+  if ((!Array.isArray(data) || !data.length) && cleanTitle !== songName) {
+    data = await searchLrclib(songName).catch(() => null);
+  }
+
+  if (!Array.isArray(data) || !data.length) return null;
+
   let hit = data.find((x: any) => {
-    if (!x.duration) return false;
+    if (!x.duration || !durationMs) return false;
     const diff = Math.abs(x.duration * 1000 - durationMs);
     return diff <= 3000 && (x.syncedLyrics || x.plainLyrics);
   });
 
-  // Fallback to any hit
   if (!hit) {
     hit = data.find((x: any) => x.syncedLyrics) || data.find((x: any) => x.plainLyrics);
   }
@@ -49,8 +73,13 @@ export async function fetchLrclib(songName: string, artistName: string, duration
         return m ? { t: +m[1] * 60 + +m[2], x: m[3].trim() || '♪' } : null;
       }).filter(Boolean);
       return { type: 'synced', lines: parsed };
-    } else {
-      return { type: 'plain', lyrics: hit.plainLyrics };
+    } else if (hit.plainLyrics) {
+      const lines = hit.plainLyrics
+        .split('\n')
+        .map((x: string) => x.trim())
+        .filter(Boolean)
+        .map((x: string) => ({ t: 0, x }));
+      return { type: 'plain', lines, lyrics: hit.plainLyrics };
     }
   }
   return null;

@@ -146,4 +146,8 @@ export class VinaraaPlayerWebStub extends WebPlugin implements VinaraaPlayerPlug
     document.body.removeChild(a);
     return { downloadId: 1 };
   }
+
+  async requestPermissions(_options?: { notifications?: boolean; media?: boolean }): Promise<{ notifications: string; mediaAudio: string }> {
+    return { notifications: 'granted', mediaAudio: 'granted' };
+  }
 }

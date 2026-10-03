@@ -57,6 +57,7 @@ class PlaybackService : MediaSessionService() {
             .setSessionActivity(pendingIntent)
             .build()
 
+        TrackingClient.ensureInitialized(this)
         setupTrackingListener(rawPlayer)
     }
 
@@ -78,14 +79,12 @@ class PlaybackService : MediaSessionService() {
 
         player.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                // End old session
                 val oldSid = currentSessionId
                 if (oldSid != null) {
                     TrackingClient.endSession(oldSid, lastKnownPositionMs)
                     currentSessionId = null
                 }
                 
-                // Start new session
                 val songId = mediaItem?.mediaId
                 if (songId != null && songId.isNotEmpty()) {
                     TrackingClient.startSession(
