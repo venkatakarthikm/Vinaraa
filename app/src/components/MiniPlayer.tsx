@@ -38,9 +38,11 @@ export default function MiniPlayer() {
   if (!song || sheets.length > 0) return null;
 
   const path = location.pathname;
-  // Compact CD mode on detail pages & search screen so it never covers inputs / filters
+  // Compact CD mode on detail pages, search, library, stats so it never covers inputs / filters
   const isCompactMode =
     path === '/search' ||
+    path === '/library' ||
+    path === '/stats' ||
     path.startsWith('/album/') ||
     path.startsWith('/artist/') ||
     path.startsWith('/playlist/') ||
@@ -63,7 +65,7 @@ export default function MiniPlayer() {
           transition={springs.snappy}
           onClick={() => navigate('/player')}
           className="fixed right-4 z-40 w-[58px] h-[58px] cursor-grab active:cursor-grabbing select-none"
-          style={{ bottom: 'calc(var(--sab) + 64px + 72px)' }}
+          style={{ bottom: 'calc(var(--sab) + 64px + 36px)' }}
         >
           <div className="relative w-full h-full rounded-full bg-[#0B0B0D] border-[2px] border-line shadow-2xl flex items-center justify-center overflow-hidden">
             {/* Rotating Vinyl/Cover */}

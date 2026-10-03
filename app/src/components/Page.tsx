@@ -41,15 +41,17 @@ export default function Page({
       {/* Header for Tab Root */}
       {isTabRoot && title && (
         <header
-          className={`sticky top-0 z-20 flex items-center justify-between px-5 transition-all duration-180 bg-bg/95 backdrop-blur-md ${
-            isScrolledTab ? 'border-b border-line shadow-sm' : ''
+          className={`sticky top-0 z-20 flex items-center justify-between px-5 transition-all duration-200 ${
+            isScrolledTab
+              ? 'bg-bg/80 backdrop-blur-md border-b border-line/40 shadow-sm'
+              : 'bg-transparent'
           }`}
-          style={{ paddingTop: 'calc(var(--sat) + 8px)', paddingBottom: '8px' }}
+          style={{ paddingTop: 'calc(var(--sat) + 12px)', paddingBottom: '10px' }}
         >
           <h1
             className="t-h1 transition-transform origin-left duration-180"
             style={{
-              transform: isScrolledTab ? 'scale(0.85)' : 'scale(1)',
+              transform: isScrolledTab ? 'scale(0.88)' : 'scale(1)',
             }}
           >
             {title}
@@ -61,15 +63,17 @@ export default function Page({
       {/* Header for Detail Page */}
       {!isTabRoot && (
         <header
-          className={`sticky top-0 left-0 right-0 z-20 flex items-center justify-between px-3 transition-all duration-200 bg-bg/95 backdrop-blur-md ${
-            isScrolledDetail ? 'border-b border-line shadow-sm' : ''
+          className={`sticky top-0 left-0 right-0 z-20 flex items-center justify-between px-3 transition-all duration-200 ${
+            isScrolledDetail
+              ? 'bg-bg/80 backdrop-blur-md border-b border-line/40 shadow-sm'
+              : 'bg-transparent'
           }`}
-          style={{ paddingTop: 'calc(var(--sat) + 8px)', paddingBottom: '8px' }}
+          style={{ paddingTop: 'calc(var(--sat) + 12px)', paddingBottom: '10px' }}
         >
           <button
             onClick={() => navigate(-1)}
             aria-label="Back"
-            className="w-10 h-10 rounded-full bg-surface-2 text-text flex items-center justify-center transition-colors"
+            className="w-10 h-10 rounded-full bg-surface-2/80 backdrop-blur-sm text-text flex items-center justify-center transition-colors"
           >
             <ChevronLeft size={22} />
           </button>

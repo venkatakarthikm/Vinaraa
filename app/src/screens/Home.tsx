@@ -87,8 +87,8 @@ export default function Home() {
       <div className="absolute inset-0 overflow-y-auto overscroll-contain pb-[var(--bottom-chrome)]">
         {/* Top Bar (Sticky, Safe area padded) */}
         <header
-          className="flex items-center justify-between px-5 sticky top-0 z-20 bg-bg/95 backdrop-blur-md border-b border-line/30"
-          style={{ paddingTop: 'calc(var(--sat) + 8px)', paddingBottom: '8px' }}
+          className="flex items-center justify-between px-5 sticky top-0 z-20 bg-transparent transition-colors duration-200"
+          style={{ paddingTop: 'calc(var(--sat) + 12px)', paddingBottom: '8px' }}
         >
           {/* Avatar (44x44) */}
           <button

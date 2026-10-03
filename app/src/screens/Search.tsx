@@ -10,7 +10,6 @@ import Page from '@/components/Page';
 import SongRow from '@/components/SongRow';
 import { MediaCard, ArtistCircle } from '@/components/MediaCard';
 import Chip from '@/components/Chip';
-import { ControlStrip } from '@/components/ControlStrip';
 import Button from '@/components/Button';
 import { Sheet } from '@/components/SheetHost';
 
@@ -110,9 +109,35 @@ export default function Search() {
 
   return (
     <Page title="Search" isTabRoot>
-      <div className="flex flex-col gap-6 px-5 pt-2 pb-[140px]">
-        {/* Type Filter Chips (Docked directly above search field via ControlStrip slot) */}
-        <ControlStrip>
+      <div className="flex flex-col gap-5 px-5 pt-2 pb-[120px]">
+        {/* TOP STICKY SEARCH BAR + TYPE FILTERS */}
+        <div className="sticky top-[calc(var(--sat)+12px)] z-20 pt-1 pb-2 bg-bg/90 backdrop-blur-md flex flex-col gap-3">
+          {/* Search Input Box */}
+          <div className="w-full h-[52px] rounded-[26px] bg-surface-2 border border-line flex items-center px-4 shadow-sm">
+            <SearchIcon size={20} className="text-muted mr-3 flex-shrink-0" />
+            <input
+              ref={inputRef}
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search songs, albums, artists"
+              className="w-full bg-transparent outline-none text-text t-body text-[15px] font-medium"
+            />
+            {query && (
+              <button
+                onClick={() => {
+                  setQuery('');
+                  setResults(null);
+                }}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-muted hover:text-text"
+                aria-label="Clear search"
+              >
+                <X size={18} />
+              </button>
+            )}
+          </div>
+
+          {/* Type Filter Chips */}
           <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar flex-1 mr-2">
               {types.map((type) => (
@@ -126,26 +151,26 @@ export default function Search() {
             </div>
             <button
               onClick={() => setFiltersOpen(true)}
-              className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 border ${
+              className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 border ${
                 selectedLanguage !== 'All'
                   ? 'bg-primary text-on-primary border-primary'
                   : 'bg-surface-2 text-text border-line'
               }`}
               aria-label="Filter"
             >
-              <SlidersHorizontal size={18} />
+              <SlidersHorizontal size={16} />
             </button>
           </div>
-        </ControlStrip>
+        </div>
 
         {/* Floating Suggestions Panel */}
         <AnimatePresence>
           {query.trim().length > 0 && suggestions.length > 0 && !results && (
             <motion.div
-              initial={{ opacity: 0, y: 10 }}
+              initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
-              className="fixed bottom-[calc(var(--sab)+8px+64px+8px+56px+8px)] left-[12px] right-[12px] z-30 max-w-[456px] mx-auto bg-surface-3 surface-glass rounded-[24px] border border-line p-2 shadow-2xl overflow-hidden max-h-[280px] overflow-y-auto"
+              exit={{ opacity: 0, y: -10 }}
+              className="z-30 w-full bg-surface-3 surface-glass rounded-[24px] border border-line p-2 shadow-2xl overflow-hidden max-h-[280px] overflow-y-auto"
             >
               {suggestions.slice(0, 6).map((item, idx) => (
                 <button
@@ -168,7 +193,7 @@ export default function Search() {
 
         {/* IDLE STATE (Query Empty) */}
         {!query.trim() && (
-          <div className="flex flex-col gap-8">
+          <div className="flex flex-col gap-8 pt-2">
             {/* Recent Searches */}
             {history.length > 0 && (
               <section className="flex flex-col gap-3">
@@ -260,7 +285,7 @@ export default function Search() {
 
         {/* RESULTS STATE */}
         {query.trim().length >= 2 && (
-          <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-6 pt-2">
             {loading ? (
               <div className="flex flex-col gap-4">
                 {[1, 2, 3, 4, 5, 6].map((n) => (
@@ -356,31 +381,6 @@ export default function Search() {
               </div>
             ) : null}
           </div>
-        )}
-      </div>
-
-      {/* Docked Search Input Field at Bottom */}
-      <div className="fixed bottom-[calc(var(--sab)+8px+64px+8px)] left-[12px] right-[12px] z-20 max-w-[456px] mx-auto h-[56px] rounded-[28px] bg-surface border border-line surface-glass shadow-xl flex items-center px-4">
-        <SearchIcon size={22} className="text-muted mr-3 flex-shrink-0" />
-        <input
-          ref={inputRef}
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search songs, albums, artists"
-          className="w-full bg-transparent outline-none text-text t-body text-[16px] font-medium"
-        />
-        {query && (
-          <button
-            onClick={() => {
-              setQuery('');
-              setResults(null);
-            }}
-            className="w-10 h-10 rounded-full flex items-center justify-center text-muted hover:text-text"
-            aria-label="Clear search field"
-          >
-            <X size={20} />
-          </button>
         )}
       </div>
 
