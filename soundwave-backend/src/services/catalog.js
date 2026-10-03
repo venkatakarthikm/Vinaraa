@@ -507,8 +507,45 @@ async function getPlaylist(id, { limit = 100 } = {}) {
 
 async function getLyrics(id) {
   const { value, stale } = await cache.swr('lyrics', id, env.CACHE_TTL_ENTITY * 6, async () => {
-    const { data, upstream } = await saavn.songLyrics(id);
-    const lyrics = data?.data?.lyrics || data?.data?.hasLyrics === false ? data?.data?.lyrics : data?.data?.lyrics;
+    let lyrics = null, upstream = null;
+    try {
+      const res = await saavn.songLyrics(id);
+      upstream = res?.upstream;
+      lyrics = res?.data?.lyrics || null;
+    } catch (e) {}
+
+    if (!lyrics) {
+      try {
+        const song = await Song.findOne({ saavnId: id }).lean();
+        if (song?.name) {
+          const artist = (song.singers?.[0]?.name || '').split(',')[0].trim();
+          const clean = String(song.name)
+            .replace(/\(From\s+"[^"]*"\)/gi, '')
+            .replace(/\s*[\(\[].*?[\)\]]/g, '')
+            .trim();
+          const q = (n) => 'https://lrclib.net/api/search?'
+            + `track_name=${encodeURIComponent(n)}&artist_name=${encodeURIComponent(artist)}`;
+          const r = await fetch(q(clean || song.name), {
+            headers: { 'user-agent': 'Vinaraa/1.0 (https://vinaraa.onrender.com)' }
+          });
+          let hits = await r.json();
+          if (!Array.isArray(hits) || !hits.length) {
+            const r2 = await fetch(q(song.name), {
+              headers: { 'user-agent': 'Vinaraa/1.0 (https://vinaraa.onrender.com)' }
+            });
+            hits = await r2.json();
+          }
+          if (Array.isArray(hits) && hits.length) {
+            const durMs = song.durationMs || 0;
+            const byDur = hits.find((x) => x.duration && durMs &&
+              Math.abs(x.duration * 1000 - durMs) <= 3000 && (x.syncedLyrics || x.plainLyrics));
+            const hit = byDur || hits.find((x) => x.syncedLyrics)
+                      || hits.find((x) => x.plainLyrics);
+            lyrics = hit?.syncedLyrics || hit?.plainLyrics || null;
+          }
+        }
+      } catch (e) {}
+    }
     return { lyrics: lyrics || null, upstream };
   }, 'lyrics');
   return { ...value, stale: Boolean(stale) };

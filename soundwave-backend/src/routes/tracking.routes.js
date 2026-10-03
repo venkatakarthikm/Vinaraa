@@ -37,7 +37,8 @@ router.post(
     const song = await Song.findOne({ saavnId: req.body.songId }).lean();
     if (!song) {
       // First time we see this song: fetch + persist it, then open the session.
-      await catalog.getSong(req.body.songId).catch(() => null);
+      const fetched = await catalog.getSong(req.body.songId).catch(() => null);
+      if (!fetched) console.warn('[tracking] song not found, session opens with durationMs=0', req.body.songId);
     }
     const session = await tracking.startSession(req.user, req.body);
     return created(res, {
