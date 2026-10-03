@@ -206,7 +206,7 @@ export default function FullPlayer() {
   };
 
   const handleSeekCommit = () => {
-    if (effectiveDuration) {
+    if (draggingSeek && effectiveDuration) {
       const targetMs = Math.round(seekFraction * effectiveDuration);
       seekTo(targetMs);
     }
@@ -460,9 +460,17 @@ export default function FullPlayer() {
               max={1}
               step={0.001}
               value={draggingSeek ? seekFraction : progress}
-              onPointerDown={() => setDraggingSeek(true)}
-              onChange={(e) => setSeekFraction(Number(e.target.value))}
+              onPointerDown={() => {
+                setSeekFraction(progress);
+                setDraggingSeek(true);
+              }}
+              onChange={(e) => {
+                setDraggingSeek(true);
+                setSeekFraction(Number(e.target.value));
+              }}
               onPointerUp={handleSeekCommit}
+              onPointerCancel={() => setDraggingSeek(false)}
+              onTouchEnd={handleSeekCommit}
               className="w-full h-[4px] bg-line rounded-full outline-none accent-primary appearance-none cursor-pointer"
             />
           </div>

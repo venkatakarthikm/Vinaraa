@@ -49,73 +49,120 @@ export default function Onboarding() {
   const currentStep = STEPS[stepIndex];
   const currentSelections = selections[currentStep.key] || [];
 
-  // Fetch initial languages or step bundle
+  // Backend names for each wizard step (GET /onboarding/options?type=...)
+  const STEP_TYPE: Record<string, string> = {
+    movies: 'movies',
+    heroes: 'actors',
+    singers: 'singers',
+    directors: 'directors',
+  };
+  const [loadError, setLoadError] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  // Language code used for the backend (codes are names such as "hindi", "telugu")
+  const language = selections.languages[0]?.id || 'hindi';
+
+  const mapItems = (raw: any[]): OptionItem[] =>
+    (raw || [])
+      .map((item: any) => ({
+        id: String(item.id || item.code || item.name || ''),
+        name: item.name || item.label || '',
+        image: item.image,
+      }))
+      .filter((i) => i.id && i.name);
+
+  // GET /onboarding/bundle returns { steps: [{ key, items }] }. Older shape: { movies, actors, singers, directors }.
+  const pickFromBundle = (data: any, key: string): OptionItem[] => {
+    const type = STEP_TYPE[key];
+    const fromSteps = data?.steps?.find((st: any) => st.key === type)?.items;
+    return mapItems(fromSteps || data?.[type] || []);
+  };
+
+  // Load languages (step 1) or the bundle (steps 2-5)
   useEffect(() => {
-    let isMounted = true;
-    setLoading(true);
+    let alive = true;
+    setLoadError(false);
+    setSearch('');
 
     if (stepIndex === 0) {
-      onboardingApi.languages()
+      setLoading(true);
+      onboardingApi
+        .languages()
         .then((res: any) => {
-          if (isMounted) {
-            const langs = (res?.languages || res || []).map((l: any) => ({
-              id: l.code || l.id,
-              code: l.code || l.id,
-              name: l.label || l.name,
-              label: l.nativeName || l.label || l.name,
-            }));
-            setItems(langs);
-            setLoading(false);
-          }
+          if (!alive) return;
+          const langs = (res?.languages || res || []).map((l: any) => ({
+            id: l.code || l.id,
+            code: l.code || l.id,
+            name: l.label || l.name,
+            label: l.nativeName || l.label || l.name,
+          }));
+          setItems(langs);
+          setLoading(false);
         })
         .catch(() => {
-          if (isMounted) setLoading(false);
+          if (!alive) return;
+          setLoading(false);
+          setLoadError(true);
         });
+    } else if (bundle) {
+      setItems(pickFromBundle(bundle, currentStep.key));
+      setLoading(false);
     } else {
-      if (!bundle && selections.languages.length > 0) {
-        const firstLang = selections.languages[0].id || 'hi';
-        onboardingApi.bundle(firstLang)
-          .then((data: any) => {
-            if (isMounted) {
-              setBundle(data);
-              updateStepItems(data, currentStep.key, search);
-              setLoading(false);
-            }
-          })
-          .catch(() => {
-            if (isMounted) setLoading(false);
-          });
-      } else if (bundle) {
-        updateStepItems(bundle, currentStep.key, search);
-        setLoading(false);
-      }
+      setLoading(true);
+      onboardingApi
+        .bundle(language)
+        .then((data: any) => {
+          if (!alive) return;
+          setBundle(data);
+          setItems(pickFromBundle(data, currentStep.key));
+          setLoading(false);
+        })
+        .catch(() => {
+          if (!alive) return;
+          setLoading(false);
+          setLoadError(true);
+        });
     }
 
     return () => {
-      isMounted = false;
+      alive = false;
     };
-  }, [stepIndex]);
+  }, [stepIndex, reloadKey]);
 
-  const updateStepItems = (data: any, key: string, query: string) => {
-    let rawItems: any[] = [];
-    if (key === 'movies') rawItems = data?.movies || [];
-    if (key === 'heroes') rawItems = data?.actors || [];
-    if (key === 'singers') rawItems = data?.singers || [];
-    if (key === 'directors') rawItems = data?.directors || [];
-
-    let formatted = rawItems.map((item: any) => ({
-      id: item.id || item.code || item.name,
-      name: item.name || item.label,
-      image: item.image,
-    }));
-
-    if (query.trim().length > 0) {
-      formatted = formatted.filter((i) =>
-        i.name.toLowerCase().includes(query.toLowerCase())
-      );
+  // Live search: calls GET /onboarding/options?type=&language=&q= (debounced). Falls back to filtering the bundle.
+  useEffect(() => {
+    if (stepIndex === 0) return;
+    const q = search.trim();
+    if (q.length < 2) {
+      setSearching(false);
+      if (bundle) setItems(pickFromBundle(bundle, currentStep.key));
+      return;
     }
-    setItems(formatted);
-  };
+    let alive = true;
+    setSearching(true);
+    const timer = setTimeout(() => {
+      onboardingApi
+        .options({ type: STEP_TYPE[currentStep.key], language, q })
+        .then((res: any) => {
+          if (alive) setItems(mapItems(res?.items || []));
+        })
+        .catch(() => {
+          if (!alive) return;
+          const local = pickFromBundle(bundle, currentStep.key).filter((i) =>
+            i.name.toLowerCase().includes(q.toLowerCase())
+          );
+          setItems(local);
+        })
+        .finally(() => {
+          if (alive) setSearching(false);
+        });
+    }, 300);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [search, stepIndex, bundle]);
 
   const toggleSelect = (item: OptionItem) => {
     const key = currentStep.key;
@@ -289,8 +336,19 @@ export default function Onboarding() {
               <div key={n} className="h-[72px] rounded-[20px] bg-surface-2 animate-pulse" />
             ))}
           </div>
+        ) : loadError ? (
+          <div className="flex flex-col items-center gap-3 pt-16 text-center">
+            <p className="t-h3 text-text">Couldn't load options</p>
+            <p className="t-cap text-muted">Check your connection and try again.</p>
+            <Button size="sm" onClick={() => setReloadKey((k) => k + 1)}>Retry</Button>
+          </div>
         ) : (
           <>
+            {stepIndex > 0 && !searching && items.length === 0 && (
+              <p className="t-cap text-muted text-center pt-10">
+                {search.trim().length >= 2 ? `No results for "${search.trim()}"` : 'Nothing to show yet'}
+              </p>
+            )}
             {/* Step 1: Languages Grid (2-column) */}
             {currentStep.key === 'languages' && (
               <div className="grid grid-cols-2 gap-3 mt-2">
@@ -408,13 +466,11 @@ export default function Onboarding() {
             <input
               type="text"
               value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                if (bundle) updateStepItems(bundle, currentStep.key, e.target.value);
-              }}
+              onChange={(e) => setSearch(e.target.value)}
               placeholder={`Search ${currentStep.key}…`}
               className="w-full bg-transparent outline-none text-text t-body text-[15px]"
             />
+            {searching && <span className="ml-2 text-[12px] text-muted flex-shrink-0">Searching…</span>}
           </div>
         )}
 

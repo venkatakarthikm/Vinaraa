@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { ensurePlayable } from '@/player/resolve';
-import { markQueueMutation } from '@/player/engine';
+import { markQueueMutation, markUserToggle } from '@/player/engine';
 
 export type RepeatMode = 'off' | 'all' | 'one';
 
@@ -134,7 +134,14 @@ export const usePlayerStore = create<PlayerState>()(
         });
       },
       setPlaying: (isPlaying) => set({ desiredPlaying: isPlaying, isPlaying }),
-      togglePlay: () => set((state) => ({ desiredPlaying: !state.desiredPlaying })),
+      togglePlay: () => {
+        markUserToggle();
+        // Optimistic: the icon flips instantly; native confirms a moment later.
+        set((state) => {
+          const next = !state.desiredPlaying;
+          return { desiredPlaying: next, isPlaying: next };
+        });
+      },
       setPosition: (positionMs) => set({ positionMs }),
       seekTo: (ms) => set({ seekRequestMs: ms }),
       clearSeek: () => set({ seekRequestMs: null }),
