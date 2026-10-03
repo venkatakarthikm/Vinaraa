@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import type { PanInfo } from 'framer-motion';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import {
   ChevronDown, ChevronUp, EllipsisVertical, Heart, Play, Pause, SkipBack, SkipForward,
   Shuffle, Repeat, Repeat1, Headphones, Timer, Gauge, ListMusic, Palette,
-  FolderPlus, Download, Disc3, Mic2, Info, Check, Image as ImageIcon
+  FolderPlus, Download, Disc3, Mic2, Info, Check, Music2, Image as ImageIcon
 } from 'lucide-react';
 import { usePlayerStore } from '@/store/player';
 import type { Song } from '@/store/player';
@@ -13,7 +13,7 @@ import { useProgressStore } from '@/store/progress';
 import { usePrefsStore } from '@/store/prefs';
 import type { PlayerStyle } from '@/store/prefs';
 import { useUIStore } from '@/store/ui';
-import { playlists, music } from '@/api/endpoints';
+import { playlists } from '@/api/endpoints';
 import Marquee from '@/components/Marquee';
 import EqBars from '@/components/EqBars';
 import { Sheet } from '@/components/SheetHost';
@@ -21,7 +21,8 @@ import SaveToPlaylistSheet from '@/components/SaveToPlaylistSheet';
 import QueueSheet from '@/components/QueueSheet';
 import Button from '@/components/Button';
 import Chip from '@/components/Chip';
-import { getCachedLyrics, setCachedLyrics, fetchLrclib } from '@/utils/lyrics';
+import LyricsPanel from '@/components/LyricsPanel';
+import type { LyricsSong } from '@/hooks/useLyrics';
 
 function formatTime(ms: number) {
   if (!ms || isNaN(ms)) return '0:00';
@@ -36,27 +37,6 @@ const STYLES_LIST: { id: PlayerStyle; name: string; desc: string }[] = [
   { id: 'classic', name: 'Classic', desc: 'Clean and minimal' },
   { id: 'lyrics', name: 'Lyrics stage', desc: 'Lyrics first, controls tucked below' },
 ];
-
-const normalizeLyrics = (raw: any) => {
-  if (!raw) return null;
-  if (Array.isArray(raw.lines) && raw.lines.length) {
-    const cleaned = raw.lines.map((line: any) => {
-      const text = typeof line === 'string' ? line : line.x || line.text || '';
-      const cleanText = text.replace(/\[\d+:\d+(?:\.\d+)?\]/g, '').trim();
-      return { t: line.t || 0, x: cleanText || '♪' };
-    }).filter((l: any) => l.x);
-    return { type: raw.type || 'synced', lines: cleaned };
-  }
-  const text =
-    typeof raw.lyrics === 'string' ? raw.lyrics :
-    typeof raw.lyrics?.lyrics === 'string' ? raw.lyrics.lyrics : '';
-  if (!text.trim()) return null;
-  const lines = text.replace(/<br\s*\/?>/gi, '\n').split('\n')
-    .map((x: string) => x.replace(/\[\d+:\d+(?:\.\d+)?\]/g, '').trim())
-    .filter(Boolean)
-    .map((x: string) => ({ t: 0, x }));
-  return lines.length ? { type: 'plain', lines } : null;
-};
 
 export default function FullPlayer() {
   const navigate = useNavigate();
@@ -78,7 +58,9 @@ export default function FullPlayer() {
   const currentIndex = usePlayerStore((s) => s.currentIndex);
   const contextTitleStore = usePlayerStore((s) => s.contextTitle);
 
-  const { positionMs, durationMs } = useProgressStore();
+  // position / duration in MILLISECONDS
+  const positionMs = useProgressStore((s) => s.positionMs);
+  const durationMs = useProgressStore((s) => s.durationMs);
 
   const song: Song | null = queue[currentIndex] || null;
   const effectiveDuration = durationMs > 0 ? durationMs : song?.durationMs || 0;
@@ -102,48 +84,30 @@ export default function FullPlayer() {
   const [timerSheetOpen, setTimerSheetOpen] = useState(false);
   const [speedSheetOpen, setSpeedSheetOpen] = useState(false);
 
-  // Lyrics data
-  const [lyricsData, setLyricsData] = useState<any>(null);
-
   // Dragging seek bar
   const [draggingSeek, setDraggingSeek] = useState(false);
   const [seekFraction, setSeekFraction] = useState(0);
 
-  // Ref for active lyric line auto-scroll
-  const activeLyricRef = useRef<HTMLParagraphElement | null>(null);
+  // Song object in the shape LyricsPanel expects (stable between renders)
+  const lyricsSong: LyricsSong | null = useMemo(
+    () =>
+      song
+        ? {
+            id: song.id,
+            name: song.name,
+            artistsText: song.artist,
+            album: typeof song.album === 'string' ? song.album : undefined,
+            durationMs: song.durationMs,
+          }
+        : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [song?.id, song?.name, song?.artist, song?.album, song?.durationMs],
+  );
 
   useEffect(() => {
     if (song?.id) {
       playlists.isLiked(song.id).then((l) => setLiked(Boolean(l))).catch(() => {});
     }
-  }, [song?.id]);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!song?.id) { setLyricsData(null); return; }
-
-    (async () => {
-      try {
-        const cached = await getCachedLyrics(song.id);
-        if (cached && !cancelled) setLyricsData(cached);
-      } catch {}
-
-      try {
-        const res = await music.lyrics(song.id);
-        const norm = normalizeLyrics(res);
-        if (norm && !cancelled) { setLyricsData(norm); setCachedLyrics(song.id, norm); return; }
-      } catch {}
-
-      try {
-        const primaryArtist = (song.artist || '').split(',')[0].trim();
-        const lrc = await fetchLrclib(song.name, primaryArtist, song.durationMs || 0);
-        if (cancelled) return;
-        if (lrc) { setLyricsData(lrc); setCachedLyrics(song.id, lrc); }
-        else setLyricsData(null);
-      } catch { if (!cancelled) setLyricsData(null); }
-    })();
-
-    return () => { cancelled = true; };
   }, [song?.id]);
 
   useEffect(() => {
@@ -153,29 +117,6 @@ export default function FullPlayer() {
   useEffect(() => {
     setPlayerInfoOpen(infoOpen);
   }, [infoOpen, setPlayerInfoOpen]);
-
-  // Compute active lyric line index based on positionMs
-  const currentSec = positionMs / 1000;
-  const lines: any[] = lyricsData?.lines || [];
-  let activeLyricIdx = -1;
-
-  if (lines.length > 0) {
-    for (let i = 0; i < lines.length; i++) {
-      const lineTime = lines[i].t || 0;
-      const nextTime = lines[i + 1] ? lines[i + 1].t : Infinity;
-      if (currentSec >= lineTime && currentSec < nextTime) {
-        activeLyricIdx = i;
-        break;
-      }
-    }
-  }
-
-  // Auto-scroll active lyric line to center
-  useEffect(() => {
-    if (lyricsOpen && activeLyricRef.current) {
-      activeLyricRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  }, [activeLyricIdx, lyricsOpen]);
 
   if (!song) {
     return (
@@ -187,6 +128,10 @@ export default function FullPlayer() {
       </div>
     );
   }
+
+  const activeStyle = playerStyle;
+  // Lyrics are visible when opened by swipe/button, or when the "Lyrics stage" style is selected
+  const lyricsVisible = lyricsOpen || activeStyle === 'lyrics';
 
   const handleToggleLike = async () => {
     const next = !liked;
@@ -213,9 +158,7 @@ export default function FullPlayer() {
     setDraggingSeek(false);
   };
 
-  const activeStyle = playerStyle;
-
-  // Gestures for Art Zone
+  // Gestures for the art zone (only active while artwork is shown)
   const handleArtDragEnd = (_: any, info: PanInfo) => {
     const dy = info.offset.y;
     const dx = info.offset.x;
@@ -224,8 +167,7 @@ export default function FullPlayer() {
       if (dy < -80 || info.velocity.y < -500) {
         setLyricsOpen(true);
       } else if (dy > 100 || info.velocity.y > 600) {
-        if (lyricsOpen) setLyricsOpen(false);
-        else navigate(-1);
+        navigate(-1);
       }
     } else {
       if (dx < -60) nextTrack();
@@ -233,7 +175,15 @@ export default function FullPlayer() {
     }
   };
 
-  // Gestures for Controls Zone
+  // Swipe down on the small grab handle above the lyrics: close lyrics, or minimise
+  const handleLyricsHandleDragEnd = (_: any, info: PanInfo) => {
+    if (info.offset.y > 80 || info.velocity.y > 600) {
+      if (lyricsOpen) setLyricsOpen(false);
+      else navigate(-1);
+    }
+  };
+
+  // Gestures for the controls zone
   const handleControlsDragEnd = (_: any, info: PanInfo) => {
     const dy = info.offset.y;
     if (dy < -60 || info.velocity.y < -500) {
@@ -255,7 +205,9 @@ export default function FullPlayer() {
               className="absolute inset-0 w-[160%] h-[160%] -left-[30%] -top-[30%] object-cover blur-3xl opacity-45 transition-all duration-500"
             />
           ) : (
-            <div className="w-full h-full bg-surface-2 flex items-center justify-center text-muted">🎵</div>
+            <div className="w-full h-full bg-surface-2 flex items-center justify-center text-muted">
+              <Music2 size={40} />
+            </div>
           )}
           <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/25 to-bg" />
         </div>
@@ -287,46 +239,45 @@ export default function FullPlayer() {
         </button>
       </header>
 
-      {/* ZONE B: ART OR LYRICS STAGE ZONE */}
+      {/* ZONE B: ART OR LYRICS ZONE
+          Drag is disabled while lyrics are visible so the lyrics can scroll and be tapped. */}
       <motion.div
-        drag
+        drag={lyricsVisible ? false : true}
+        dragDirectionLock
         dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
         dragElastic={0.3}
         onDragEnd={handleArtDragEnd}
-        className="relative z-10 flex-1 flex items-center justify-center px-6 py-4 cursor-grab active:cursor-grabbing overflow-hidden"
+        className={`relative z-10 flex-1 min-h-0 flex items-center justify-center overflow-hidden ${
+          lyricsVisible ? 'px-4 py-2' : 'px-6 py-4 cursor-grab active:cursor-grabbing'
+        }`}
       >
-        {/* IN-PLACE LYRICS STAGE */}
-        {lyricsOpen ? (
-          <div className="w-full h-full max-h-[360px] flex flex-col items-center overflow-y-auto no-scrollbar py-6 px-3 text-center">
-            {lines.length > 0 ? (
-              <div className="flex flex-col gap-6 my-auto py-12">
-                {lines.map((line: any, idx: number) => {
-                  const isActive = idx === activeLyricIdx;
-                  return (
-                    <p
-                      key={idx}
-                      ref={isActive ? activeLyricRef : null}
-                      className={`transition-all duration-300 ${
-                        isActive
-                          ? 't-lyric-active text-[24px] font-extrabold text-primary scale-105'
-                          : 't-lyric text-[17px] font-semibold text-muted/65'
-                      }`}
-                    >
-                      {line.x}
-                    </p>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="my-auto text-center py-12">
-                <p className="t-body text-muted">Lyrics aren't available for this song</p>
-              </div>
-            )}
+        {lyricsVisible ? (
+          /* LYRICS (opened by swipe/button, or "Lyrics stage" style) */
+          <div className="w-full h-full min-h-0 flex flex-col">
+            {/* grab handle: drag down to close lyrics / minimise */}
+            <motion.div
+              drag="y"
+              dragConstraints={{ top: 0, bottom: 0 }}
+              dragElastic={0.4}
+              onDragEnd={handleLyricsHandleDragEnd}
+              className="h-8 flex-shrink-0 flex items-start justify-center cursor-grab touch-none"
+              aria-label="Drag down to close lyrics"
+            >
+              <div className="mt-1 w-10 h-1 rounded-full bg-line" />
+            </motion.div>
+
+            <LyricsPanel
+              className="flex-1 min-h-0"
+              song={lyricsSong}
+              positionMs={positionMs}
+              isPlaying={isPlaying}
+              onSeek={seekTo}
+            />
           </div>
         ) : (
           /* ARTWORK STYLES */
           <>
-            {/* Style 1: Cinematic (Full width uncropped poster card with ambient glow) */}
+            {/* Style 1: Cinematic */}
             {activeStyle === 'cinematic' && (
               <div className="w-full max-w-[340px] aspect-square rounded-[32px] overflow-hidden bg-surface-2 shadow-2xl border border-white/20 relative">
                 {song.image ? (
@@ -337,7 +288,9 @@ export default function FullPlayer() {
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <div className="w-full h-full bg-surface-2 flex items-center justify-center text-muted">🎵</div>
+                  <div className="w-full h-full bg-surface-2 flex items-center justify-center text-muted">
+                    <Music2 size={48} />
+                  </div>
                 )}
               </div>
             )}
@@ -353,7 +306,9 @@ export default function FullPlayer() {
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <div className="w-full h-full bg-surface-2 flex items-center justify-center text-muted">🎵</div>
+                  <div className="w-full h-full bg-surface-2 flex items-center justify-center text-muted">
+                    <Music2 size={48} />
+                  </div>
                 )}
               </div>
             )}
@@ -380,23 +335,6 @@ export default function FullPlayer() {
                 {song.image && <img src={song.image} alt={song.name} className="w-full h-full object-cover" />}
               </div>
             )}
-
-            {/* Style 5: Lyrics Stage */}
-            {activeStyle === 'lyrics' && (
-              <div className="w-full h-full flex flex-col justify-center overflow-y-auto px-4 text-center">
-                {lines.length > 0 ? (
-                  <div className="flex flex-col gap-4 py-8">
-                    {lines.map((line: any, idx: number) => (
-                      <p key={idx} className="t-lyric text-[20px] font-bold text-text/80">
-                        {line.x}
-                      </p>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="t-body text-muted">Lyrics aren't available for this song</p>
-                )}
-              </div>
-            )}
           </>
         )}
       </motion.div>
@@ -404,28 +342,31 @@ export default function FullPlayer() {
       {/* LOWER PANELS (C, D, E, F) */}
       <motion.div
         drag="y"
+        dragDirectionLock
         dragConstraints={{ top: 0, bottom: 0 }}
         dragElastic={0.2}
         onDragEnd={handleControlsDragEnd}
         className="relative z-10 flex flex-col gap-3 px-6 pb-[calc(var(--sab)+12px)]"
       >
-        {/* SWIPE UP / TOGGLE LYRICS INDICATOR */}
-        <button
-          onClick={() => setLyricsOpen(!lyricsOpen)}
-          className="self-center flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-surface-2/80 backdrop-blur-md border border-line/40 text-muted hover:text-text active:scale-95 transition-all cursor-pointer shadow-sm"
-        >
-          {lyricsOpen ? (
-            <>
-              <ImageIcon size={14} className="text-primary" />
-              <span className="t-micro text-[11px] font-bold uppercase tracking-wider">Show artwork</span>
-            </>
-          ) : (
-            <>
-              <ChevronUp size={14} className="text-primary animate-bounce" />
-              <span className="t-micro text-[11px] font-bold uppercase tracking-wider">Swipe up for lyrics</span>
-            </>
-          )}
-        </button>
+        {/* SWIPE UP / TOGGLE LYRICS INDICATOR (hidden in "Lyrics stage" style: lyrics are already shown) */}
+        {activeStyle !== 'lyrics' && (
+          <button
+            onClick={() => setLyricsOpen(!lyricsOpen)}
+            className="self-center flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-surface-2/80 backdrop-blur-md border border-line/40 text-muted hover:text-text active:scale-95 transition-all cursor-pointer shadow-sm"
+          >
+            {lyricsOpen ? (
+              <>
+                <ImageIcon size={14} className="text-primary" />
+                <span className="t-micro text-[11px] font-bold uppercase tracking-wider">Show artwork</span>
+              </>
+            ) : (
+              <>
+                <ChevronUp size={14} className="text-primary animate-bounce" />
+                <span className="t-micro text-[11px] font-bold uppercase tracking-wider">Swipe up for lyrics</span>
+              </>
+            )}
+          </button>
+        )}
 
         {/* ZONE C: INFO ROW */}
         <div className="flex items-center justify-between gap-3">
@@ -573,7 +514,7 @@ export default function FullPlayer() {
         </div>
       </motion.div>
 
-      {/* OPTIONS SHEET (§8.9) */}
+      {/* OPTIONS SHEET */}
       <Sheet
         id="player-options-sheet"
         isOpen={optionsOpen}
@@ -656,7 +597,7 @@ export default function FullPlayer() {
         </div>
       </Sheet>
 
-      {/* STYLE PICKER CAROUSEL SHEET (§8.9) */}
+      {/* STYLE PICKER CAROUSEL SHEET */}
       <Sheet
         id="style-picker-sheet"
         isOpen={stylePickerOpen}
@@ -705,7 +646,7 @@ export default function FullPlayer() {
         </div>
       </Sheet>
 
-      {/* SONG INFO SHEET (§8.8) */}
+      {/* SONG INFO SHEET */}
       <Sheet
         id="song-info-sheet"
         isOpen={infoOpen}
