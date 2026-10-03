@@ -43,7 +43,7 @@ export default function PlaylistPage() {
 
   const handlePlayAll = (startIndex = 0) => {
     if (songs.length) {
-      setQueue(songs, startIndex);
+      setQueue(songs, startIndex, 'playlist', playlist?.id, playlist?.name);
       navigate('/player');
     }
   };

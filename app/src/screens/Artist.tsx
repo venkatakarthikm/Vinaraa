@@ -52,7 +52,7 @@ export default function Artist() {
 
   const handlePlay = (startIndex = 0) => {
     if (topSongs.length) {
-      setQueue(topSongs, startIndex);
+      setQueue(topSongs, startIndex, 'artist', artist?.id, artist?.name);
       navigate('/player');
     }
   };

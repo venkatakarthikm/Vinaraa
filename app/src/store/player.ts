@@ -36,8 +36,9 @@ interface PlayerState {
   showQueue: boolean;
   sessionId: string | null;
   seekRequestMs: number | null;
+  contextTitle: string | null;
 
-  setQueue: (songs: Song[], startIndex?: number, source?: string, contextId?: string) => Promise<void>;
+  setQueue: (songs: Song[], startIndex?: number, source?: string, contextId?: string, contextTitle?: string) => Promise<void>;
   appendToQueue: (songs: Song[]) => void;
   playNext: (song: Song) => void;
   setPlaying: (isPlaying: boolean) => void;
@@ -70,8 +71,9 @@ export const usePlayerStore = create<PlayerState>()(
       showQueue: false,
       sessionId: null,
       seekRequestMs: null,
+      contextTitle: null,
 
-      setQueue: async (songs, startIndex = 0, source, contextId) => {
+      setQueue: async (songs, startIndex = 0, source, contextId, contextTitle) => {
         const song = songs[startIndex];
         if (!song) return;
         const playableSong = await ensurePlayable(song);
@@ -90,6 +92,7 @@ export const usePlayerStore = create<PlayerState>()(
           durationMs: playableSong?.durationMs || 0,
           isPlaying: true,
           desiredPlaying: true,
+          contextTitle: contextTitle || song.album || 'Your Queue',
         });
       },
       appendToQueue: async (songs) => {
@@ -164,7 +167,8 @@ export const usePlayerStore = create<PlayerState>()(
           }
         }
 
-        get().setQueue(queue, nextIdx);
+        const nextSong = queue[nextIdx];
+        set({ currentIndex: nextIdx, positionMs: 0, durationMs: nextSong?.durationMs || 0 });
         import('@/native/player').then(({ VinaraaPlayer }) => {
           VinaraaPlayer.next().catch(console.error);
         });
@@ -178,7 +182,8 @@ export const usePlayerStore = create<PlayerState>()(
           prevIdx = queue.length - 1;
         }
 
-        get().setQueue(queue, prevIdx);
+        const prevSong = queue[prevIdx];
+        set({ currentIndex: prevIdx, positionMs: 0, durationMs: prevSong?.durationMs || 0 });
         import('@/native/player').then(({ VinaraaPlayer }) => {
           VinaraaPlayer.previous().catch(console.error);
         });
@@ -197,6 +202,7 @@ export const usePlayerStore = create<PlayerState>()(
         currentIndex: state.currentIndex,
         repeat: state.repeat,
         shuffle: state.shuffle,
+        contextTitle: state.contextTitle,
       }),
     }
   )

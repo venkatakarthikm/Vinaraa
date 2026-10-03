@@ -70,7 +70,7 @@ export default function Home() {
   const handlePlayRail = (rail: any) => {
     const songs = (rail?.items || []).filter((i: any) => i.type === 'song').map(formatPlayerSong);
     if (songs.length) {
-      setQueue(songs, 0);
+      setQueue(songs, 0, 'home_rail', rail?.key, rail?.title);
       navigate('/player');
     }
   };
@@ -259,14 +259,14 @@ export default function Home() {
                       matchPercent={item.matchPercent}
                       onClick={() => {
                         if (item.type === 'song') {
-                          setQueue([formatPlayerSong(item)], 0);
+                          setQueue([formatPlayerSong(item)], 0, 'home', item.id, item.name);
                           navigate('/player');
                         } else {
                           navigate(`/${item.type || 'album'}/${item.id}`);
                         }
                       }}
                       onPlayClick={() => {
-                        setQueue([formatPlayerSong(item)], 0);
+                        setQueue([formatPlayerSong(item)], 0, 'home', item.id, item.name);
                         navigate('/player');
                       }}
                     />

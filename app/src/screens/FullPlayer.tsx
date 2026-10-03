@@ -3,7 +3,7 @@ import type { PanInfo } from 'framer-motion';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import {
-  ChevronDown, EllipsisVertical, Heart, Play, Pause, SkipBack, SkipForward,
+  ChevronDown, ChevronUp, EllipsisVertical, Heart, Play, Pause, SkipBack, SkipForward,
   Shuffle, Repeat, Repeat1, Headphones, Timer, Gauge, ListMusic, Palette,
   FolderPlus, Download, Disc3, Mic2, Info, Check, Type
 } from 'lucide-react';
@@ -30,7 +30,7 @@ function formatTime(ms: number) {
 }
 
 const STYLES_LIST: { id: PlayerStyle; name: string; desc: string }[] = [
-  { id: 'cinematic', name: 'Cinematic', desc: 'Full-bleed artwork, big controls' },
+  { id: 'cinematic', name: 'Cinematic', desc: 'Full ambient artwork backdrop' },
   { id: 'glass', name: 'Glass', desc: 'Floating art on a frosted panel' },
   { id: 'vinyl', name: 'Vinyl', desc: 'A spinning record with a tonearm' },
   { id: 'classic', name: 'Classic', desc: 'Clean and minimal' },
@@ -67,12 +67,16 @@ export default function FullPlayer() {
   const seekTo = usePlayerStore((s) => s.seekTo);
   const queue = usePlayerStore((s) => s.queue);
   const currentIndex = usePlayerStore((s) => s.currentIndex);
+  const contextTitleStore = usePlayerStore((s) => s.contextTitle);
 
   const { positionMs, durationMs } = useProgressStore();
 
   const song: Song | null = queue[currentIndex] || null;
   const effectiveDuration = durationMs > 0 ? durationMs : song?.durationMs || 0;
   const progress = effectiveDuration ? Math.min(1, positionMs / effectiveDuration) : 0;
+
+  // Context Name ("Playing from ...")
+  const contextTitle = contextTitleStore || song?.album || 'Your Queue';
 
   // States
   const [liked, setLiked] = useState(false);
@@ -206,16 +210,17 @@ export default function FullPlayer() {
 
   return (
     <div className="relative w-full h-full bg-bg overflow-hidden flex flex-col justify-between select-none">
-      {/* Background for Glass style */}
-      {activeStyle === 'glass' && (
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+      {/* Background for Cinematic & Glass styles */}
+      {(activeStyle === 'cinematic' || activeStyle === 'glass') && (
+        <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
           {song.image && (
             <img
               src={song.image}
               alt=""
-              className="absolute inset-0 w-[140%] h-[140%] -left-[20%] -top-[20%] object-cover blur-3xl opacity-55"
+              className="absolute inset-0 w-[150%] h-[150%] -left-[25%] -top-[25%] object-cover blur-3xl opacity-50 transition-all duration-500"
             />
           )}
+          <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/25 to-bg" />
         </div>
       )}
 
@@ -223,7 +228,7 @@ export default function FullPlayer() {
       <header className="relative z-20 flex items-center justify-between px-4 pt-[calc(var(--sat)+8px)] h-[48px]">
         <button
           onClick={() => navigate(-1)}
-          className="w-11 h-11 rounded-full bg-black/35 backdrop-blur-md flex items-center justify-center text-white"
+          className="w-11 h-11 rounded-full bg-black/35 backdrop-blur-md flex items-center justify-center text-white shadow-sm"
           aria-label="Collapse player"
         >
           <ChevronDown size={28} />
@@ -231,14 +236,14 @@ export default function FullPlayer() {
 
         <div className="flex flex-col items-center text-center">
           <span className="t-cap text-[12px] text-muted font-medium">Playing from</span>
-          <span className="t-h3 text-[14px] font-bold text-text truncate max-w-[180px]">
-            Your Queue
+          <span className="t-h3 text-[14px] font-bold text-text truncate max-w-[200px]">
+            {contextTitle}
           </span>
         </div>
 
         <button
           onClick={() => setOptionsOpen(true)}
-          className="w-11 h-11 rounded-full bg-black/35 backdrop-blur-md flex items-center justify-center text-white"
+          className="w-11 h-11 rounded-full bg-black/35 backdrop-blur-md flex items-center justify-center text-white shadow-sm"
           aria-label="Player options"
         >
           <EllipsisVertical size={22} />
@@ -255,15 +260,17 @@ export default function FullPlayer() {
       >
         {/* Style 1: Cinematic */}
         {activeStyle === 'cinematic' && (
-          <div className="absolute inset-0 pointer-events-none">
-            {song.image && (
-              <img
+          <div className="w-[310px] h-[310px] rounded-[28px] overflow-hidden bg-surface-2 shadow-2xl border border-white/15 relative">
+            {song.image ? (
+              <motion.img
+                layoutId="player-art"
                 src={song.image}
-                alt=""
-                className="w-full h-[560px] object-cover object-[center_20%]"
+                alt={song.name}
+                className="w-full h-full object-cover"
               />
+            ) : (
+              <div className="w-full h-full bg-surface-2 flex items-center justify-center text-muted">🎵</div>
             )}
-            <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-bg" />
           </div>
         )}
 
@@ -312,7 +319,7 @@ export default function FullPlayer() {
             {Array.isArray(lyricsData?.lines) && lyricsData.lines.length > 0 ? (
               <div className="flex flex-col gap-4 py-8">
                 {lyricsData.lines.map((line: any, idx: number) => (
-                  <p key={idx} className="t-lyric text-[22px] font-bold text-text/70">
+                  <p key={idx} className="t-lyric text-[22px] font-bold text-text/80">
                     {line.x || line.text}
                   </p>
                 ))}
@@ -330,18 +337,27 @@ export default function FullPlayer() {
         dragConstraints={{ top: 0, bottom: 0 }}
         dragElastic={0.2}
         onDragEnd={handleControlsDragEnd}
-        className="relative z-10 flex flex-col gap-4 px-6 pb-[calc(var(--sab)+12px)]"
+        className="relative z-10 flex flex-col gap-3 px-6 pb-[calc(var(--sab)+12px)]"
       >
+        {/* SWIPE UP FOR LYRICS INDICATOR */}
+        <button
+          onClick={() => setLyricsOpen(true)}
+          className="self-center flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-surface-2/80 backdrop-blur-md border border-line/40 text-muted hover:text-text active:scale-95 transition-all cursor-pointer shadow-sm"
+        >
+          <ChevronUp size={14} className="text-primary animate-bounce" />
+          <span className="t-micro text-[11px] font-bold uppercase tracking-wider">Swipe up for lyrics</span>
+        </button>
+
         {/* ZONE C: INFO ROW */}
         <div className="flex items-center justify-between gap-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <Marquee text={song.name} className="t-h1 text-[28px] font-extrabold text-text truncate" />
+              <Marquee text={song.name} className="t-h1 text-[26px] font-extrabold text-text truncate" />
               <EqBars isPlaying={isPlaying} />
             </div>
             <button
               onClick={() => song.singers?.[0]?.id && navigate(`/artist/${song.singers[0].id}`)}
-              className="t-cap text-[15px] text-muted truncate hover:underline text-left block"
+              className="t-cap text-[14.5px] text-muted truncate hover:underline text-left block mt-0.5"
             >
               {song.artist}
             </button>
@@ -357,8 +373,8 @@ export default function FullPlayer() {
         </div>
 
         {/* ZONE D: SEEK BAR */}
-        <div className="flex flex-col gap-1.5">
-          <div className="relative w-full h-[44px] flex items-center cursor-pointer">
+        <div className="flex flex-col gap-1">
+          <div className="relative w-full h-[36px] flex items-center cursor-pointer">
             <input
               type="range"
               min={0}
@@ -372,7 +388,7 @@ export default function FullPlayer() {
             />
           </div>
 
-          <div className="flex items-center justify-between t-num text-[12px] text-muted font-medium -mt-3">
+          <div className="flex items-center justify-between t-num text-[12px] text-muted font-medium -mt-2">
             <span>{formatTime(positionMs)}</span>
             <span>{formatTime(effectiveDuration)}</span>
           </div>
@@ -398,10 +414,10 @@ export default function FullPlayer() {
 
           <button
             onClick={togglePlay}
-            className="w-[76px] h-[76px] rounded-full bg-primary text-on-primary flex items-center justify-center shadow-2xl active:scale-95 transition-transform"
+            className="w-[72px] h-[72px] rounded-full bg-primary text-on-primary flex items-center justify-center shadow-2xl active:scale-95 transition-transform"
             aria-label={isPlaying ? 'Pause' : 'Play'}
           >
-            {isPlaying ? <Pause size={34} fill="currentColor" /> : <Play size={34} fill="currentColor" className="ml-1" />}
+            {isPlaying ? <Pause size={32} fill="currentColor" /> : <Play size={32} fill="currentColor" className="ml-1" />}
           </button>
 
           <button
@@ -426,11 +442,11 @@ export default function FullPlayer() {
         </div>
 
         {/* ZONE F: UTILITY ROW */}
-        <div className="flex items-center justify-between h-[48px]">
+        <div className="flex items-center justify-between h-[44px]">
           {/* Output Chip */}
-          <div className="h-[40px] px-3.5 rounded-full bg-surface-2 border border-line flex items-center gap-2 max-w-[140px]">
+          <div className="h-[38px] px-3.5 rounded-full bg-surface-2 border border-line flex items-center gap-2 max-w-[140px]">
             <Headphones size={18} className="text-muted flex-shrink-0" />
-            <span className="t-cap text-[13px] font-semibold text-text truncate">
+            <span className="t-cap text-[12.5px] font-semibold text-text truncate">
               Phone speaker
             </span>
           </div>
@@ -438,30 +454,30 @@ export default function FullPlayer() {
           <div className="flex items-center gap-1">
             <button
               onClick={() => setTimerSheetOpen(true)}
-              className={`w-11 h-11 rounded-full flex items-center justify-center ${
+              className={`w-10 h-10 rounded-full flex items-center justify-center ${
                 sleepTimerMinutes ? 'bg-primary text-on-primary' : 'text-muted'
               }`}
               aria-label="Timer"
             >
-              <Timer size={22} />
+              <Timer size={20} />
             </button>
 
             <button
               onClick={() => setSpeedSheetOpen(true)}
-              className={`w-11 h-11 rounded-full flex items-center justify-center ${
+              className={`w-10 h-10 rounded-full flex items-center justify-center ${
                 playbackSpeed !== 1 ? 'bg-primary text-on-primary' : 'text-muted'
               }`}
               aria-label="Speed"
             >
-              <Gauge size={22} />
+              <Gauge size={20} />
             </button>
 
             <button
               onClick={() => setQueueOpen(true)}
-              className="w-[48px] h-[48px] rounded-[16px] bg-surface-2 border border-line flex items-center justify-center text-text relative"
+              className="w-[44px] h-[44px] rounded-[16px] bg-surface-2 border border-line flex items-center justify-center text-text relative"
               aria-label="Queue"
             >
-              <ListMusic size={22} />
+              <ListMusic size={20} />
               <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-primary text-on-primary t-micro text-[11px] font-bold flex items-center justify-center">
                 {queue.length}
               </span>
@@ -610,7 +626,7 @@ export default function FullPlayer() {
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-            className="fixed inset-0 z-[60] bg-bg/92 backdrop-blur-xl flex flex-col p-6 max-w-[480px] mx-auto"
+            className="fixed inset-0 z-[60] bg-bg/95 backdrop-blur-xl flex flex-col p-6 max-w-[480px] mx-auto"
           >
             <div className="flex items-center justify-between pb-4 border-b border-line">
               <h2 className="t-h2 text-[20px] font-bold text-text">Lyrics</h2>
@@ -639,7 +655,7 @@ export default function FullPlayer() {
                     <p
                       key={idx}
                       style={{ fontSize: `${lyricsFontSize}px` }}
-                      className="font-bold text-text/80 leading-relaxed"
+                      className="font-bold text-text/85 leading-relaxed"
                     >
                       {line.x || line.text}
                     </p>

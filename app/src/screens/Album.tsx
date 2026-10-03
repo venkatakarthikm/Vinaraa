@@ -43,7 +43,7 @@ export default function Album() {
 
   const handlePlayAll = (startIndex = 0) => {
     if (songs.length) {
-      setQueue(songs, startIndex);
+      setQueue(songs, startIndex, 'album', album?.id, album?.name);
       navigate('/player');
     }
   };

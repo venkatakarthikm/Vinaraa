@@ -101,7 +101,7 @@ export default function Search() {
   const handlePlaySong = (song: any, songList: any[]) => {
     const formatted = songList.map(formatPlayerSong);
     const startIdx = formatted.findIndex((s) => s.id === song.id);
-    setQueue(formatted, Math.max(0, startIdx));
+    setQueue(formatted, Math.max(0, startIdx), 'search', query, 'Search Results');
     navigate('/player');
   };
 
